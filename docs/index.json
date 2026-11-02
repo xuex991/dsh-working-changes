@@ -1,0 +1,44 @@
+{
+  "format": 1,
+  "title": {
+    "en": "xue1991 DSH Plugins",
+    "zh": "xue1991 DSH 插件"
+  },
+  "description": {
+    "en": "Small, focused plugins for DeepSeek Harness.",
+    "zh": "为 DeepSeek Harness 制作的小而专注的插件。"
+  },
+  "plugins": [
+    {
+      "name": "dsh-working-changes",
+      "title": {
+        "en": "Working Changes",
+        "zh": "当前变更"
+      },
+      "description": {
+        "en": "See files changed from HEAD in the current DSH workspace and inspect each diff in the native right sidebar.",
+        "zh": "查看当前 DSH 工作区相对 HEAD 改了哪些文件，并在原生右侧栏逐文件查看 diff。"
+      },
+      "icon": "icons/working-changes.svg",
+      "author": "xue1991",
+      "homepage": "https://github.com/xuex991/dsh-working-changes#readme",
+      "repository": {
+        "url": "https://github.com/xuex991/dsh-working-changes"
+      },
+      "versions": [
+        {
+          "version": "0.1.0",
+          "publishTimestamp": 1793599974,
+          "source": {
+            "type": "git",
+            "url": "https://github.com/xuex991/dsh-working-changes",
+            "commit": "5e5e3368d9e19e3c9469d9f9141e90db58278ef8"
+          },
+          "engines": {
+            "dsh": ">=0.2.1-rc.2"
+          }
+        }
+      ]
+    }
+  ]
+}
