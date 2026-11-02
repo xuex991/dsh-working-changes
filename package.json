@@ -1,6 +1,6 @@
 {
   "name": "dsh-working-changes",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "See files changed from HEAD in the current DSH workspace and inspect each diff in the right sidebar.",
   "type": "module",
   "main": "index.js",
