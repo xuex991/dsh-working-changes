@@ -27,12 +27,12 @@
       },
       "versions": [
         {
-          "version": "0.1.0",
-          "publishTimestamp": 1793599974,
+          "version": "0.1.1",
+          "publishTimestamp": 1793600316,
           "source": {
             "type": "git",
             "url": "https://github.com/xuex991/dsh-working-changes",
-            "commit": "5e5e3368d9e19e3c9469d9f9141e90db58278ef8"
+            "commit": "69e421b35933a70f39f6ea8b8f879b66d210b826"
           },
           "engines": {
             "dsh": ">=0.2.1-rc.2"
