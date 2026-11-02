@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Working Changes",
+    "description": "See every file changed from HEAD in the current workspace and inspect its diff in the right sidebar."
+  }
+}

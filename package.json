@@ -1,0 +1,63 @@
+{
+  "name": "dsh-working-changes",
+  "version": "0.1.0",
+  "description": "See files changed from HEAD in the current DSH workspace and inspect each diff in the right sidebar.",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./lib/client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "index.js",
+    "src",
+    "lib/client.js",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg",
+    "README.md",
+    "THIRD-PARTY-NOTICES.md"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-conversation",
+        "@deepseek-ai/dsh-client-ui-sidebar-right"
+      ]
+    }
+  },
+  "engines": {
+    "dsh": ">=0.2.1-rc.2"
+  },
+  "author": {
+    "name": "xue1991",
+    "url": "https://github.com/xuex991"
+  },
+  "homepage": "https://github.com/xuex991/dsh-working-changes#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/xuex991/dsh-working-changes.git"
+  },
+  "bugs": {
+    "url": "https://github.com/xuex991/dsh-working-changes/issues"
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "git",
+    "diff",
+    "workspace"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  },
+  "license": "MIT"
+}
