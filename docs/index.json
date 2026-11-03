@@ -16,8 +16,8 @@
         "zh": "当前变更"
       },
       "description": {
-        "en": "Inspect current changes and browse local branch Git history across one or many repositories in the DSH right sidebar.",
-        "zh": "在 DSH 右侧栏查看一个或多个仓库的当前变更，并浏览本地分支的 Git log。"
+        "en": "Inspect current changes, browse local branch Git history, and view commit content diffs in the DSH right sidebar.",
+        "zh": "在 DSH 右侧栏查看当前变更，浏览本地分支 Git log，并查看提交内容 diff。"
       },
       "icon": "icons/working-changes.svg",
       "author": "xue1991",
@@ -27,12 +27,12 @@
       },
       "versions": [
         {
-          "version": "0.4.0",
-          "publishTimestamp": 1793688011,
+          "version": "0.5.0",
+          "publishTimestamp": 1793693493,
           "source": {
             "type": "git",
             "url": "https://github.com/xuex991/dsh-working-changes",
-            "commit": "d011f129861a817c76b8616e647492b7d5a1d4b8"
+            "commit": "cc988de1c704107fdbc3cc7ed7c20f27e48c96e5"
           },
           "engines": {
             "dsh": ">=0.2.1-rc.2"
