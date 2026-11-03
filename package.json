@@ -1,6 +1,6 @@
 {
   "name": "dsh-working-changes",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "description": "Inspect current changes and local branch history across one or many Git repositories in the DSH right sidebar.",
   "type": "module",
   "main": "index.js",

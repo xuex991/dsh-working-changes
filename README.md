@@ -27,7 +27,9 @@ independent repositories.
 - Shows `repositories · files · +insertions −deletions` for multi-repository
   workspaces and groups files by repository.
 - Separates working changes into staged, unstaged, untracked, and conflicted states.
-- Hovering the summary lists changed files with per-file line counts.
+- Hovering the summary shows each project and current branch, including freshly
+  initialized repositories without commits, then lists changed files with
+  per-file line counts.
 - Clicking the summary or a file opens the native DSH right sidebar.
 - Renders unified diffs with line numbers and platform diff colors.
 - Supports file filtering, status badges, renames, binary files, and refresh.
@@ -88,7 +90,8 @@ Then open **Working Changes** from the discovery page.
 - 工作区根目录不是 Git 仓库时，自动发现其下并列的独立仓库。
 - 多仓库时显示 `仓库数 · 文件数 · +新增行 −删除行`，并按仓库分组。
 - 当前变更区分已暂存、未暂存、未跟踪和冲突状态。
-- Hover 总览，直接查看每个文件改了多少行。
+- Hover 总览，查看当前项目与分支，并直接查看每个文件改了多少行；刚初始化、
+  尚无 Commit 的仓库也会显示当前分支。
 - 点击总览或文件，在 DSH 原生右侧栏查看 unified diff。
 - 支持文件筛选、状态标记、重命名、二进制文件和手动刷新。
 - 使用 Codex 风格的层级文件树，支持按路径搜索和目录折叠，只展示包含变更

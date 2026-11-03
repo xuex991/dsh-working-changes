@@ -215,6 +215,8 @@ test('repository without HEAD is treated as empty baseline and all files are add
   assert.equal(snapshot.repos.length, 1)
   assert.equal(snapshot.repos[0].error, null)
   assert.equal(snapshot.repos[0].baselineTree, '4b825dc642cb6eb9a060e54bf8d69288fbee4904')
+  assert.ok(snapshot.repos[0].branch)
+  assert.equal(snapshot.repos[0].detached, false)
   assert.equal(snapshot.files.length, 1)
   assert.equal(snapshot.files[0].status, 'A')
 })

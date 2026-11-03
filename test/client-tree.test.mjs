@@ -162,6 +162,30 @@ test('history keys keep repository and branch identities separate', async () => 
   )
 })
 
+test('hover context shows project and branch without relying on changes', async () => {
+  const { hoverRepoContexts } = await loadClientTestApi()
+  const contexts = hoverRepoContexts({
+    repos: [{
+      id: '.',
+      name: 'fresh-project',
+      relPath: '.',
+      branch: 'main',
+      detached: false,
+      files: [],
+      summary: { files: 0 },
+    }],
+    summary: { files: 0 },
+  })
+
+  assert.deepEqual(JSON.parse(JSON.stringify(contexts)), [{
+    id: '.',
+    name: 'fresh-project',
+    branch: 'main',
+    detached: false,
+    relPath: '.',
+  }])
+})
+
 test('history baselines are captured once and preserved across refreshes', async () => {
   const { branchHistoryKey, captureHistoryBaselines, isSessionBranch } = await loadClientTestApi()
   const initial = captureHistoryBaselines({}, {
