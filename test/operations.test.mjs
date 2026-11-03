@@ -376,6 +376,7 @@ test('branch commits are returned newest first with branch identity', async (t) 
       GIT_COMMITTER_DATE: '2026-11-03T01:00:00Z',
     },
   })
+  const baseline = (await git(['rev-parse', 'HEAD'], { cwd: root })).stdout.trim()
   await writeFile(join(root, 'file.txt'), 'two\n')
   await git(['add', 'file.txt'], { cwd: root })
   await git(['commit', '-qm', 'middle'], {
@@ -400,16 +401,81 @@ test('branch commits are returned newest first with branch identity', async (t) 
     cwd: root,
     repoRoot: root,
     branch: defaultBranch,
+    baseline,
   })
 
   assert.equal(result.branch, defaultBranch)
-  assert.equal(result.total, 3)
+  assert.equal(result.baseline, baseline)
+  assert.equal(result.total, 2)
   assert.equal(result.truncated, false)
   assert.deepEqual(result.commits.map((commit) => commit.subject), [
     'newest',
     'middle',
   ])
   assert.match(result.commits[0].sha, /^[0-9a-f]{40}$/)
+})
+
+test('branch commit ranges use an independent session baseline per branch', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'dsh-history-branch-baselines-test-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  await commitRepo(root, { 'file.txt': 'initial\n' })
+  const defaultBranch = (await git(['symbolic-ref', '--short', 'HEAD'], { cwd: root })).stdout.trim()
+  await git(['switch', '-qc', 'feature/session'], { cwd: root })
+  const featureBaseline = (await git(['rev-parse', 'HEAD'], { cwd: root })).stdout.trim()
+
+  await writeFile(join(root, 'file.txt'), 'feature one\n')
+  await git(['add', 'file.txt'], { cwd: root })
+  await git(['commit', '-qm', 'feature session commit'], { cwd: root })
+
+  await git(['switch', '-q', defaultBranch], { cwd: root })
+  const defaultBaseline = (await git(['rev-parse', 'HEAD'], { cwd: root })).stdout.trim()
+  await writeFile(join(root, 'main.txt'), 'main one\n')
+  await git(['add', 'main.txt'], { cwd: root })
+  await git(['commit', '-qm', 'default session commit'], { cwd: root })
+
+  const operations = createOperations({ exec })
+  const feature = await operations.handle('commits', {
+    cwd: root,
+    repoRoot: root,
+    branch: 'feature/session',
+    baseline: featureBaseline,
+  })
+  const main = await operations.handle('commits', {
+    cwd: root,
+    repoRoot: root,
+    branch: defaultBranch,
+    baseline: defaultBaseline,
+  })
+
+  assert.deepEqual(feature.commits.map((commit) => commit.subject), [
+    'feature session commit',
+  ])
+  assert.deepEqual(main.commits.map((commit) => commit.subject), [
+    'default session commit',
+  ])
+})
+
+test('branch commits reject a missing or invalid session baseline', async (t) => {
+  const root = await commitRepo(await mkdtemp(join(tmpdir(), 'dsh-history-baseline-test-')), {
+    'file.txt': 'initial\n',
+  })
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const branch = (await git(['symbolic-ref', '--short', 'HEAD'], { cwd: root })).stdout.trim()
+  const operations = createOperations({ exec })
+
+  await assert.rejects(
+    operations.handle('commits', { cwd: root, repoRoot: root, branch }),
+    (error) => error.code === 'invalid-params',
+  )
+  await assert.rejects(
+    operations.handle('commits', {
+      cwd: root,
+      repoRoot: root,
+      branch,
+      baseline: 'f'.repeat(40),
+    }),
+    (error) => error.code === 'not-found',
+  )
 })
 
 test('commit view compares against the first parent', async (t) => {

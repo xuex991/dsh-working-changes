@@ -716,6 +716,12 @@ export function createOperations(deps) {
     if (!branch || branch.includes('\0')) {
       throw new GitError('A local branch name is required.', { code: 'invalid-params' })
     }
+    const requestedBaseline = typeof params.baseline === 'string'
+      ? params.baseline.trim()
+      : ''
+    if (!COMMIT_HASH.test(requestedBaseline)) {
+      throw new GitError('baseline must be a full Git commit hash.', { code: 'invalid-params' })
+    }
     const ref = `refs/heads/${branch}`
     const exists = await runGit(['show-ref', '--verify', '--quiet', ref], {
       cwd: root,
@@ -725,21 +731,37 @@ export function createOperations(deps) {
     if (exists.code !== 0) {
       throw new GitError(`Local branch not found: ${branch}`, { code: 'not-found' })
     }
+    const baselineResult = await runGit([
+      'rev-parse',
+      '--verify',
+      `${requestedBaseline}^{commit}`,
+    ], {
+      cwd: root,
+      signal,
+      allowFailure: true,
+    })
+    const baseline = baselineResult.stdout.trim()
+    if (baselineResult.code !== 0 || !COMMIT_HASH.test(baseline)) {
+      throw new GitError(`Session baseline not found: ${requestedBaseline}`, {
+        code: 'not-found',
+      })
+    }
     const options = readOptions(params)
     const [head, totalResult, log] = await Promise.all([
       runGit(['rev-parse', ref], { cwd: root, signal }),
-      runGit(['rev-list', '--count', ref], { cwd: root, signal }),
+      runGit(['rev-list', '--count', ref, `^${baseline}`], { cwd: root, signal }),
       runGit([
         'log',
         '--date-order',
         `--max-count=${options.maxCommits + 1}`,
         '--format=%H%x1f%P%x1f%ct%x1f%an%x1f%s%x1e',
         ref,
+        `^${baseline}`,
       ], { cwd: root, signal }),
     ])
     let commits = parseCommitLog(log.stdout)
     // Root commits represent repository initialization, not a reviewable
-    // change, so local history starts from the first child commit.
+    // change. A valid session baseline normally excludes them already.
     commits = commits.filter((commit) => commit.parents.length > 0)
     const truncated = commits.length > options.maxCommits
     if (truncated) commits = commits.slice(0, options.maxCommits)
@@ -749,6 +771,7 @@ export function createOperations(deps) {
     ))
     return {
       branch,
+      baseline,
       sha: head.stdout.trim(),
       commits,
       total: Number(totalResult.stdout.trim()) || commits.length,
