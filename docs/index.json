@@ -16,8 +16,8 @@
         "zh": "当前变更"
       },
       "description": {
-        "en": "See changes across one or many Git repositories in the current DSH workspace and inspect each diff in the native right sidebar.",
-        "zh": "查看当前 DSH 工作区一个或多个 Git 仓库的改动，并在原生右侧栏逐文件查看 diff。"
+        "en": "Browse changes across one or many Git repositories in a searchable file tree, and inspect each diff in the native right sidebar.",
+        "zh": "用可搜索文件树浏览一个或多个 Git 仓库的改动，并在原生右侧栏逐文件查看 diff。"
       },
       "icon": "icons/working-changes.svg",
       "author": "xue1991",
@@ -27,12 +27,12 @@
       },
       "versions": [
         {
-          "version": "0.2.0",
-          "publishTimestamp": 1793673047,
+          "version": "0.3.0",
+          "publishTimestamp": 1793684867,
           "source": {
             "type": "git",
             "url": "https://github.com/xuex991/dsh-working-changes",
-            "commit": "c7075a3e90414255f35b3a29e132124397433af1"
+            "commit": "5d4f42ec63818b4f64d51976cee8b62335bce87b"
           },
           "engines": {
             "dsh": ">=0.2.1-rc.2"
