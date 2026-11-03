@@ -29,6 +29,8 @@ multiple independent repositories.
 - Clicking the summary or a file opens the native DSH right sidebar.
 - Renders unified diffs with line numbers and platform diff colors.
 - Supports file filtering, status badges, renames, binary files, and refresh.
+- Shows a Codex-style collapsible file tree with path search; only directories
+  that contain changed files are included.
 - Refreshes after an Agent turn, on window focus, and on demand.
 - Read-only: no stage, commit, branch, stash, push, pull, or worktree actions.
 
@@ -77,6 +79,8 @@ Then open **Working Changes** from the discovery page.
 - Hover 总览，直接查看每个文件改了多少行。
 - 点击总览或文件，在 DSH 原生右侧栏查看 unified diff。
 - 支持文件筛选、状态标记、重命名、二进制文件和手动刷新。
+- 使用 Codex 风格的层级文件树，支持按路径搜索和目录折叠，只展示包含变更
+  文件的目录。
 - Agent 每轮结束、窗口重新聚焦和手动刷新时更新。
 - 只读：没有暂存、提交、切分支、stash、push、pull 或 worktree 操作。
 

@@ -257,21 +257,23 @@
         <a class="button" href="https://github.com/xuex991/dsh-working-changes/releases">下载发布版</a>
       </div>
 
-      <section class="feature" aria-labelledby="multi-repo-title">
+      <section class="feature" aria-labelledby="changed-file-ui-title">
         <div class="feature-copy">
-          <div class="feature-kicker">New in v0.2.0</div>
-          <h2 id="multi-repo-title">多仓库工作区</h2>
+          <div class="feature-kicker">New in v0.3.0</div>
+          <h2 id="changed-file-ui-title">变更文件数 UI</h2>
           <p>
-            工作区根目录不是仓库也可以。插件会自动发现下面并列的独立仓库，
-            汇总所有改动，并按仓库分组打开各自的 diff。
+            用更清晰的层级文件树浏览所有变更。只展示真正包含改动文件的目录，
+            支持折叠和按路径搜索，并自动展开匹配文件的父目录。
           </p>
-          <pre>project/
-  frontend/.git
-  backend/.git
-  infra/.git</pre>
+          <pre>Changed files
+  src/
+    components/
+      panel.js
+    client.js
+  README.md</pre>
         </div>
-        <a href="screenshots/multi-panel.png" aria-label="查看多仓库工作区截图">
-          <img src="screenshots/multi-panel.png" alt="DSH 中按 backend、frontend、infra 分组展示 Git 改动">
+        <a href="screenshots/multi-panel.png" aria-label="查看变更文件列表截图">
+          <img src="screenshots/multi-panel.png" alt="DSH 右侧栏展示当前工作区的 Git 变更文件">
         </a>
       </section>
 
@@ -286,6 +288,7 @@
           <ul>
             <li>当前工作区相对 HEAD 的文件变更</li>
             <li>自动发现并列子仓库并分组展示</li>
+            <li>可折叠、可搜索的变更文件树</li>
             <li>文件增删行数与状态</li>
             <li>原生右侧栏 unified diff</li>
             <li>只读，无 stage / commit / push</li>

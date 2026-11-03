@@ -10,3 +10,4 @@ contracts in `archive/`.
 ## Archive
 
 - [2026-Q4: Multi-repository workspace](archive/2026-Q4/feature-multi-repo-workspace.md)
+- [2026-Q4: Codex-style changed-file tree](archive/2026-Q4/feature-changed-file-tree.md)

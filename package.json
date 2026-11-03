@@ -1,7 +1,7 @@
 {
   "name": "dsh-working-changes",
-  "version": "0.2.0",
-  "description": "See changes across one or many Git repositories in the current DSH workspace and inspect each diff in the right sidebar.",
+  "version": "0.3.0",
+  "description": "Browse changes across one or many Git repositories in the current DSH workspace with a searchable file tree, and inspect each diff in the right sidebar.",
   "type": "module",
   "main": "index.js",
   "exports": {

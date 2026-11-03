@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Working Changes",
-    "description": "See changes across one or many Git repositories in the current workspace and inspect each diff in the right sidebar."
+    "description": "Browse changes across one or many Git repositories in a searchable file tree, and inspect each diff in the right sidebar."
   }
 }
