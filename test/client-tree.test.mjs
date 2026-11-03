@@ -163,7 +163,7 @@ test('history keys keep repository and branch identities separate', async () => 
 })
 
 test('history baselines are captured once and preserved across refreshes', async () => {
-  const { branchHistoryKey, captureHistoryBaselines } = await loadClientTestApi()
+  const { branchHistoryKey, captureHistoryBaselines, isSessionBranch } = await loadClientTestApi()
   const initial = captureHistoryBaselines({}, {
     repos: [
       { id: 'frontend', branches: [{ name: 'main', sha: 'a'.repeat(40) }] },
@@ -180,4 +180,21 @@ test('history baselines are captured once and preserved across refreshes', async
   assert.equal(refreshed[branchHistoryKey('frontend', 'main')], 'a'.repeat(40))
   assert.equal(refreshed[branchHistoryKey('backend', 'main')], 'b'.repeat(40))
   assert.equal(refreshed[branchHistoryKey('backend', 'feature')], 'd'.repeat(40))
+
+  assert.equal(
+    isSessionBranch(refreshed, {
+      repoId: 'frontend',
+      name: 'main',
+      sha: 'a'.repeat(40),
+    }),
+    false,
+  )
+  assert.equal(
+    isSessionBranch(refreshed, {
+      repoId: 'frontend',
+      name: 'main',
+      sha: 'e'.repeat(40),
+    }),
+    true,
+  )
 })
