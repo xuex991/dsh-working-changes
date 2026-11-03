@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "当前变更",
-    "description": "查看当前工作区相对 HEAD 改了哪些文件，并在右侧栏逐文件查看 diff。"
+    "description": "查看当前工作区一个或多个 Git 仓库的改动，并在右侧栏逐文件查看 diff。"
   }
 }

@@ -7,18 +7,24 @@
 [![License](https://img.shields.io/github/license/xuex991/dsh-working-changes)](LICENSE)
 
 A small, read-only DSH plugin that shows what the current session has changed.
-It is the working tree relative to `HEAD`: the same practical scope as
-`git status`, without staging, committing, or branch management.
+It works for a single Git repository and for container workspaces containing
+multiple independent repositories.
 
 ![Hover summary](docs/screenshots/hover.png)
 
-![Diff in the right sidebar](docs/screenshots/diff.png)
+![Multi-repository changes grouped by repository](docs/screenshots/multi-panel.png)
+
+![Diff from a child repository](docs/screenshots/multi-diff.png)
 
 ## English
 
 ### Features
 
 - Shows `branch · changed files · +insertions −deletions` in the session header.
+- Auto-discovers independent child repositories when the workspace root is not
+  itself a Git repository.
+- Shows `repositories · files · +insertions −deletions` for multi-repository
+  workspaces and groups files by repository.
 - Hovering the summary lists changed files with per-file line counts.
 - Clicking the summary or a file opens the native DSH right sidebar.
 - Renders unified diffs with line numbers and platform diff colors.
@@ -57,12 +63,17 @@ Then open **Working Changes** from the discovery page.
 - Binary files are listed but not rendered as text.
 - One diff is capped at 400,000 characters.
 - Submodule contents are not expanded.
+- Nested repositories inside a discovered repository are not expanded.
+- Automatic discovery defaults to one directory level and skips dependency and
+  build directories.
 
 ## 中文
 
 ### 功能
 
 - 在会话顶部显示 `分支 · 更改文件数 · +新增行 −删除行`。
+- 工作区根目录不是 Git 仓库时，自动发现其下并列的独立仓库。
+- 多仓库时显示 `仓库数 · 文件数 · +新增行 −删除行`，并按仓库分组。
 - Hover 总览，直接查看每个文件改了多少行。
 - 点击总览或文件，在 DSH 原生右侧栏查看 unified diff。
 - 支持文件筛选、状态标记、重命名、二进制文件和手动刷新。
@@ -94,6 +105,27 @@ https://xuex991.github.io/dsh-working-changes/index.json
 - 二进制文件只显示在文件列表里，不渲染正文。
 - 单个 diff 最多显示 400,000 字符。
 - 不展开 submodule 内容。
+- 不展开已发现仓库内部的嵌套仓库。
+- 自动发现默认只扫描一层，并跳过依赖目录和构建目录。
+
+### 多仓库工作区
+
+```text
+project/                 ← 不是 Git 仓库
+  frontend/.git          ← 会发现
+  backend/.git           ← 会发现
+  infra/.git             ← 会发现
+  node_modules/...       ← 跳过
+```
+
+每个文件都属于唯一仓库；右侧栏的 diff 会携带该仓库根和它自己的 tree
+对。一个仓库读取失败不会隐藏其他仓库的改动。
+
+### 发现配置
+
+Host RPC 支持 `discoverDepth`、`repos`、`repoLabels`、`untracked`、
+`maxRepos`、`concurrency` 和 `repoTimeoutMs`。默认发现一层、最多 20 个仓库、
+4 个仓库并发、每个仓库 15 秒超时。显式传入 `repos` 时会关闭自动发现。
 
 ## Development
 

@@ -114,6 +114,76 @@
         grid-template-columns: 1fr 1fr;
         gap: 16px;
         margin-top: 72px;
+        min-width: 0;
+      }
+
+      .feature {
+        display: grid;
+        grid-template-columns: minmax(0, .82fr) minmax(0, 1.18fr);
+        gap: 28px;
+        align-items: center;
+        margin-top: 72px;
+        padding: 22px;
+        border: 1px solid var(--line);
+        border-radius: 28px;
+        background: color-mix(in srgb, var(--paper) 82%, transparent);
+        backdrop-filter: blur(14px);
+        min-width: 0;
+      }
+
+      .feature > *,
+      .grid > *,
+      .card {
+        min-width: 0;
+      }
+
+      .feature-copy { padding: 12px 10px 12px 4px; }
+
+      .feature-kicker {
+        display: inline-flex;
+        margin-bottom: 14px;
+        padding: 5px 9px;
+        border: 1px solid color-mix(in srgb, var(--accent) 42%, transparent);
+        border-radius: 999px;
+        color: var(--accent);
+        font: 700 10px/1 "SFMono-Regular", Consolas, monospace;
+        letter-spacing: .08em;
+        text-transform: uppercase;
+      }
+
+      .feature h2 {
+        margin: 0;
+        font-family: "Iowan Old Style", "Songti SC", Georgia, serif;
+        font-size: clamp(30px, 4vw, 48px);
+        line-height: 1;
+        letter-spacing: -.04em;
+      }
+
+      .feature p {
+        margin: 18px 0 0;
+        color: var(--muted);
+        font-size: 16px;
+        line-height: 1.7;
+      }
+
+      .feature pre {
+        margin: 22px 0 0;
+        padding: 16px;
+        overflow-x: auto;
+        border-radius: 14px;
+        background: var(--code);
+        color: var(--ink);
+        font: 12px/1.7 "SFMono-Regular", Consolas, monospace;
+      }
+
+      .feature img {
+        display: block;
+        width: 100%;
+        max-width: 100%;
+        height: auto;
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        box-shadow: 0 24px 60px color-mix(in srgb, #000 12%, transparent);
       }
 
       .card {
@@ -150,7 +220,7 @@
         color: var(--ink);
         background: var(--code);
         font: 13px/1.5 "SFMono-Regular", Consolas, monospace;
-        white-space: nowrap;
+        overflow-wrap: anywhere;
       }
 
       footer {
@@ -165,8 +235,10 @@
       }
 
       @media (max-width: 680px) {
-        main { padding-top: 42px; }
+        main { width: calc(100% - 32px); padding-top: 42px; }
         .eyebrow { margin-bottom: 32px; }
+        .feature { grid-template-columns: 1fr; margin-top: 48px; padding: 14px; }
+        .feature-copy { padding: 8px 4px; }
         .grid { grid-template-columns: 1fr; margin-top: 48px; }
         footer { flex-direction: column; }
       }
@@ -177,13 +249,31 @@
       <div class="eyebrow">DeepSeek Harness · DSH Plugin</div>
       <h1>Working Changes</h1>
       <p class="lede">
-        在会话顶部看到当前分支改了哪些文件，Hover 查看文件明细，点击在右侧栏打开 diff。
+        在一个或多个 Git 仓库中查看当前改动。Hover 查看文件明细，点击在右侧栏打开 diff。
         只读，不打断当前工作流。
       </p>
       <div class="actions">
         <a class="button primary" href="https://github.com/xuex991/dsh-working-changes">GitHub 源码</a>
         <a class="button" href="https://github.com/xuex991/dsh-working-changes/releases">下载发布版</a>
       </div>
+
+      <section class="feature" aria-labelledby="multi-repo-title">
+        <div class="feature-copy">
+          <div class="feature-kicker">New in v0.2.0</div>
+          <h2 id="multi-repo-title">多仓库工作区</h2>
+          <p>
+            工作区根目录不是仓库也可以。插件会自动发现下面并列的独立仓库，
+            汇总所有改动，并按仓库分组打开各自的 diff。
+          </p>
+          <pre>project/
+  frontend/.git
+  backend/.git
+  infra/.git</pre>
+        </div>
+        <a href="screenshots/multi-panel.png" aria-label="查看多仓库工作区截图">
+          <img src="screenshots/multi-panel.png" alt="DSH 中按 backend、frontend、infra 分组展示 Git 改动">
+        </a>
+      </section>
 
       <section class="grid" aria-label="安装和功能">
         <article class="card">
@@ -195,6 +285,7 @@
           <h2>功能</h2>
           <ul>
             <li>当前工作区相对 HEAD 的文件变更</li>
+            <li>自动发现并列子仓库并分组展示</li>
             <li>文件增删行数与状态</li>
             <li>原生右侧栏 unified diff</li>
             <li>只读，无 stage / commit / push</li>

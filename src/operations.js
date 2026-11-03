@@ -1,6 +1,15 @@
-import { mkdtemp, rm } from 'node:fs/promises'
+import { lstat, mkdtemp, readdir, realpath, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { isAbsolute, join, normalize, relative, sep } from 'node:path'
+import {
+  basename,
+  dirname,
+  isAbsolute,
+  join,
+  normalize,
+  relative,
+  resolve,
+  sep,
+} from 'node:path'
 import {
   GitError,
   gitFailure,
@@ -10,10 +19,36 @@ import {
 } from './git.js'
 
 const READ_TIMEOUT = 30000
+const REPO_TIMEOUT = 15000
 const DIFF_MAX_CHARS = 400000
 const TREE_HASH = /^[0-9a-f]{40,64}$/
 const EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904'
 const OPS = new Set(['snapshot', 'diff'])
+const UNTRACKED_MODES = new Set(['list', 'ignore'])
+const IGNORED_DIRS = new Set([
+  '.git',
+  '.cache',
+  '.next',
+  '.nuxt',
+  '.turbo',
+  '.yarn',
+  'build',
+  'coverage',
+  'dist',
+  'node_modules',
+  'out',
+  'target',
+  'vendor',
+])
+const DEFAULTS = {
+  discoverDepth: 1,
+  repos: [],
+  repoLabels: {},
+  untracked: 'list',
+  maxRepos: 20,
+  concurrency: 4,
+  repoTimeoutMs: REPO_TIMEOUT,
+}
 
 function assertCwd(value) {
   if (typeof value !== 'string' || value.trim() === '') {
@@ -51,6 +86,136 @@ function assertRelativeFile(value, root) {
   return normalized.split(sep).join('/')
 }
 
+function toPosix(path) {
+  return path.split(sep).join('/')
+}
+
+function isInside(root, candidate) {
+  const rel = relative(root, candidate)
+  return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel))
+}
+
+function zeroSummary() {
+  return { files: 0, additions: 0, deletions: 0, binary: 0 }
+}
+
+function readInteger(value, fallback, minimum, maximum, label) {
+  if (value === undefined || value === null) return fallback
+  if (!Number.isInteger(value) || value < minimum || value > maximum) {
+    throw new GitError(`${label} must be an integer from ${minimum} to ${maximum}.`, {
+      code: 'invalid-params',
+    })
+  }
+  return value
+}
+
+function readOptions(params = {}) {
+  const repos = params.repos === undefined ? [] : params.repos
+  if (!Array.isArray(repos) || repos.some((item) => typeof item !== 'string' || !item.trim())) {
+    throw new GitError('repos must be an array of workspace-relative paths.', {
+      code: 'invalid-params',
+    })
+  }
+
+  const repoLabels = params.repoLabels === undefined ? {} : params.repoLabels
+  if (repoLabels === null || typeof repoLabels !== 'object' || Array.isArray(repoLabels)) {
+    throw new GitError('repoLabels must be an object.', { code: 'invalid-params' })
+  }
+  for (const [key, value] of Object.entries(repoLabels)) {
+    if (!key || typeof value !== 'string' || !value.trim()) {
+      throw new GitError('repoLabels must map paths to non-empty names.', {
+        code: 'invalid-params',
+      })
+    }
+  }
+
+  const untracked = params.untracked ?? DEFAULTS.untracked
+  if (!UNTRACKED_MODES.has(untracked)) {
+    throw new GitError('untracked must be list or ignore.', {
+      code: 'invalid-params',
+    })
+  }
+
+  return {
+    discoverDepth: readInteger(
+      params.discoverDepth,
+      DEFAULTS.discoverDepth,
+      0,
+      10,
+      'discoverDepth',
+    ),
+    repos: repos.map((item) => item.trim()),
+    repoLabels,
+    untracked,
+    maxRepos: readInteger(params.maxRepos, DEFAULTS.maxRepos, 1, 1000, 'maxRepos'),
+    concurrency: readInteger(params.concurrency, DEFAULTS.concurrency, 1, 32, 'concurrency'),
+    repoTimeoutMs: readInteger(
+      params.repoTimeoutMs,
+      DEFAULTS.repoTimeoutMs,
+      1000,
+      120000,
+      'repoTimeoutMs',
+    ),
+  }
+}
+
+function repoSignal(parentSignal, timeoutMs) {
+  const controller = new AbortController()
+  let timedOut = false
+  const abort = () => controller.abort()
+  if (parentSignal?.aborted) controller.abort()
+  else parentSignal?.addEventListener('abort', abort, { once: true })
+  const timer = setTimeout(() => {
+    timedOut = true
+    controller.abort()
+  }, timeoutMs)
+  return {
+    signal: controller.signal,
+    timedOut: () => timedOut,
+    cleanup() {
+      clearTimeout(timer)
+      parentSignal?.removeEventListener('abort', abort)
+    },
+  }
+}
+
+async function mapLimit(items, limit, worker) {
+  const results = new Array(items.length)
+  let next = 0
+  async function drain() {
+    while (next < items.length) {
+      const index = next
+      next += 1
+      results[index] = await worker(items[index], index)
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, drain))
+  return results
+}
+
+async function hasGitMarker(directory) {
+  try {
+    const marker = await lstat(join(directory, '.git'))
+    return marker.isDirectory() || marker.isFile() || marker.isSymbolicLink()
+  } catch {
+    return false
+  }
+}
+
+function repoName(relPath, root, workspace) {
+  return relPath === '.' ? basename(root) || basename(workspace) : basename(relPath)
+}
+
+function disambiguateNames(entries) {
+  const counts = new Map()
+  for (const entry of entries) counts.set(entry.baseName, (counts.get(entry.baseName) || 0) + 1)
+  for (const entry of entries) {
+    if ((counts.get(entry.baseName) || 0) < 2) continue
+    const parent = basename(dirname(entry.relPath))
+    if (parent && parent !== '.') entry.baseName = `${parent}/${entry.baseName}`
+  }
+}
+
 export function createOperations(deps) {
   const { exec } = deps
 
@@ -61,7 +226,7 @@ export function createOperations(deps) {
     return result
   }
 
-  async function repoRoot(cwd, signal) {
+  async function findRepoRoot(cwd, signal) {
     const result = await runGit(['rev-parse', '--show-toplevel'], {
       cwd,
       signal,
@@ -96,7 +261,7 @@ export function createOperations(deps) {
     }
   }
 
-  async function captureWorkingTree(root, signal) {
+  async function captureWorkingTree(root, untracked, signal) {
     const temp = await mkdtemp(join(tmpdir(), 'dsh-session-changes-'))
     const env = { GIT_INDEX_FILE: join(temp, 'index') }
     try {
@@ -109,12 +274,17 @@ export function createOperations(deps) {
       if (readHead.code !== 0) {
         await runGit(['read-tree', '--empty'], { cwd: root, signal, env })
       }
-      await runGit(['add', '--all', '--', '.'], {
-        cwd: root,
-        signal,
-        env,
-        timeoutMs: 120000,
-      })
+      await runGit(
+        untracked === 'ignore'
+          ? ['add', '--update', '--', '.']
+          : ['add', '--all', '--', '.'],
+        {
+          cwd: root,
+          signal,
+          env,
+          timeoutMs: 120000,
+        },
+      )
       const written = await runGit(['write-tree'], { cwd: root, signal, env })
       return written.stdout.trim()
     } finally {
@@ -162,7 +332,7 @@ export function createOperations(deps) {
   }
 
   function summaryOf(files) {
-    const summary = { files: files.length, additions: 0, deletions: 0, binary: 0 }
+    const summary = zeroSummary()
     for (const file of files) {
       if (file.binary) summary.binary += 1
       else {
@@ -170,68 +340,262 @@ export function createOperations(deps) {
         summary.deletions += file.deletions
       }
     }
+    summary.files = files.length
     return summary
+  }
+
+  async function walkForRepos(workspace, directory, level, depth, signal, output) {
+    if (signal?.aborted) return
+    let entries
+    try {
+      entries = await readdir(directory, { withFileTypes: true })
+    } catch {
+      return
+    }
+    entries.sort((left, right) => left.name.localeCompare(right.name))
+    for (const entry of entries) {
+      if (!entry.isDirectory() || IGNORED_DIRS.has(entry.name)) continue
+      const child = join(directory, entry.name)
+      const relPath = toPosix(relative(workspace, child))
+      if (await hasGitMarker(child)) {
+        output.push({ root: child, relPath })
+        continue
+      }
+      if (level < depth) {
+        await walkForRepos(workspace, child, level + 1, depth, signal, output)
+      }
+    }
+  }
+
+  async function discoverRepositories(workspace, options, signal) {
+    const direct = await findRepoRoot(workspace, signal)
+    if (direct.root) {
+      return {
+        rootIsRepo: true,
+        roots: [{ root: direct.root, relPath: '.' }],
+        truncated: false,
+        directError: direct.error,
+      }
+    }
+
+    const roots = []
+    let truncated = false
+    if (options.repos.length > 0) {
+      const seen = new Set()
+      for (const configured of options.repos) {
+        const normalized = normalize(configured)
+        if (isAbsolute(configured) || normalized === '..' ||
+            normalized.startsWith(`..${sep}`)) {
+          throw new GitError('Configured repositories must stay inside the workspace.', {
+            code: 'invalid-params',
+          })
+        }
+        const root = resolve(workspace, configured)
+        if (!isInside(workspace, root) || seen.has(root)) continue
+        seen.add(root)
+        roots.push({ root, relPath: toPosix(relative(workspace, root)) || '.' })
+      }
+    } else if (options.discoverDepth > 0) {
+      await walkForRepos(workspace, workspace, 1, options.discoverDepth, signal, roots)
+    }
+
+    roots.sort((left, right) => left.relPath.localeCompare(right.relPath))
+    if (roots.length > options.maxRepos) {
+      roots.length = options.maxRepos
+      truncated = true
+    }
+    return { rootIsRepo: false, roots, truncated, directError: direct.error }
+  }
+
+  function applyRepoMetadata(workspace, roots, options) {
+    const entries = roots.map(({ root, relPath }) => ({
+      root,
+      relPath,
+      baseName: repoName(relPath, root, workspace),
+    }))
+    disambiguateNames(entries)
+    return entries.map((entry) => ({
+      ...entry,
+      id: entry.relPath,
+      name: options.repoLabels[entry.relPath] || options.repoLabels[entry.root] || entry.baseName,
+    }))
+  }
+
+  function enrichFiles(repo, files) {
+    return files.map((file) => {
+      const relPath = repo.relPath === '.'
+        ? file.path
+        : `${repo.relPath}/${file.path}`
+      const oldRelPath = file.oldPath
+        ? (repo.relPath === '.' ? file.oldPath : `${repo.relPath}/${file.oldPath}`)
+        : null
+      return {
+        ...file,
+        repoId: repo.id,
+        repoRoot: repo.root,
+        repoName: repo.name,
+        repoPath: file.path,
+        relPath,
+        workspacePath: relPath,
+        oldRelPath,
+      }
+    })
+  }
+
+  async function snapshotRepository(workspace, repo, options, parentSignal) {
+    const timed = repoSignal(parentSignal, options.repoTimeoutMs)
+    try {
+      const branch = await branchName(repo.root, timed.signal)
+      const baselineTree = await headTree(repo.root, timed.signal)
+      const currentTree = await captureWorkingTree(repo.root, options.untracked, timed.signal)
+      const files = baselineTree === currentTree
+        ? []
+        : await changeList(repo.root, baselineTree, currentTree, timed.signal)
+      const enriched = enrichFiles(repo, files)
+      return {
+        id: repo.id,
+        name: repo.name,
+        relPath: repo.relPath,
+        root: repo.root,
+        branch: branch.branch,
+        detached: branch.detached,
+        baselineTree,
+        currentTree,
+        files: enriched,
+        summary: summaryOf(enriched),
+        error: null,
+        errorCode: null,
+        capturedAt: Date.now(),
+      }
+    } catch (error) {
+      const message = timed.timedOut()
+        ? `Repository snapshot timed out after ${options.repoTimeoutMs}ms.`
+        : (error?.message ? String(error.message) : String(error))
+      return {
+        id: repo.id,
+        name: repo.name,
+        relPath: repo.relPath,
+        root: repo.root,
+        branch: null,
+        detached: false,
+        baselineTree: null,
+        currentTree: null,
+        files: [],
+        summary: zeroSummary(),
+        error: message.slice(0, 4000),
+        errorCode: timed.timedOut() ? 'timeout' : (error?.code || 'git-failed'),
+        capturedAt: Date.now(),
+      }
+    } finally {
+      timed.cleanup()
+    }
   }
 
   async function snapshot(params, signal) {
     const cwd = assertCwd(params.cwd)
-    const resolved = await repoRoot(cwd, signal)
-
-    if (!resolved.root) {
-      return {
-        repo: {
+    const options = readOptions(params)
+    const discovery = await discoverRepositories(cwd, options, signal)
+    const repositories = applyRepoMetadata(cwd, discovery.roots, options)
+    const repos = await mapLimit(
+      repositories,
+      options.concurrency,
+      (repo) => snapshotRepository(cwd, repo, options, signal),
+    )
+    const files = repos.flatMap((repo) => repo.files)
+      .sort((left, right) => left.relPath.localeCompare(right.relPath))
+    const summary = summaryOf(files)
+    const failures = repos.filter((repo) => repo.error)
+    const successes = repos.filter((repo) => !repo.error)
+    const partial = failures.length > 0 && successes.length > 0
+    const allFailed = repos.length > 0 && successes.length === 0
+    const status = repos.length === 0
+      ? 'no-repos'
+      : allFailed
+        ? 'failed'
+        : files.length > 0
+          ? 'changes'
+          : 'clean'
+    const single = discovery.rootIsRepo && repos.length === 1 ? repos[0] : null
+    const legacyRepo = single
+      ? {
+          isRepo: true,
+          root: single.root,
+          branch: single.branch,
+          detached: single.detached,
+          error: single.error,
+        }
+      : {
           isRepo: false,
           root: null,
           branch: null,
           detached: false,
-          error: resolved.error || null,
-        },
-        baseline: null,
-        current: null,
-        files: [],
-        summary: { files: 0, additions: 0, deletions: 0, binary: 0 },
-        captured: false,
-      }
-    }
-
-    const root = resolved.root
-    const branch = await branchName(root, signal)
-    const baselineTree = await headTree(root, signal)
-    const currentTree = await captureWorkingTree(root, signal)
-    const files = baselineTree === currentTree
-      ? []
-      : await changeList(root, baselineTree, currentTree, signal)
+          error: discovery.directError || null,
+        }
 
     return {
-      repo: {
-        isRepo: true,
-        root,
-        branch: branch.branch,
-        detached: branch.detached,
-        error: null,
-      },
-      baseline: {
-        tree: baselineTree,
-        root,
-        capturedAt: Date.now(),
-      },
-      current: currentTree,
+      repo: legacyRepo,
+      baseline: single?.baselineTree
+        ? { tree: single.baselineTree, root: single.root, capturedAt: single.capturedAt }
+        : null,
+      current: single?.currentTree ?? null,
+      repos,
       files,
-      summary: summaryOf(files),
+      summary,
+      workspace: {
+        root: cwd,
+        rootIsRepo: discovery.rootIsRepo,
+        multiRepo: !discovery.rootIsRepo,
+        repositoryCount: repos.length,
+        failedCount: failures.length,
+        truncated: discovery.truncated,
+        partial,
+        allFailed,
+        status,
+      },
       captured: false,
     }
   }
 
-  async function diff(params, signal) {
-    const cwd = assertCwd(params.cwd)
-    const resolved = await repoRoot(cwd, signal)
-    if (!resolved.root) {
-      throw new GitError('The session working directory is not a Git repository.', {
-        code: 'not-a-repo',
+  async function resolveDiffRoot(cwd, requestedRoot, signal) {
+    if (requestedRoot === undefined || requestedRoot === null || requestedRoot === '') {
+      const resolved = await findRepoRoot(cwd, signal)
+      if (!resolved.root) {
+        throw new GitError('The session working directory is not a Git repository.', {
+          code: 'not-a-repo',
+        })
+      }
+      return resolved.root
+    }
+    if (typeof requestedRoot !== 'string' || !isAbsolute(requestedRoot) ||
+        requestedRoot.includes('\0')) {
+      throw new GitError('repoRoot must be an absolute path.', { code: 'invalid-params' })
+    }
+    let root
+    let workspace
+    try {
+      [root, workspace] = await Promise.all([realpath(requestedRoot), realpath(cwd)])
+    } catch {
+      throw new GitError('repoRoot or the workspace is unavailable.', { code: 'cwd-unavailable' })
+    }
+    if (!isInside(workspace, root) && !isInside(root, workspace)) {
+      throw new GitError('repoRoot must contain the workspace or be inside it.', {
+        code: 'invalid-params',
       })
     }
+    const resolved = await findRepoRoot(root, signal)
+    if (!resolved.root) {
+      throw new GitError('repoRoot is not a Git repository.', { code: 'not-a-repo' })
+    }
+    const canonical = await realpath(resolved.root)
+    if (canonical !== root) {
+      throw new GitError('repoRoot must be the repository root.', { code: 'invalid-params' })
+    }
+    return root
+  }
 
-    const root = resolved.root
+  async function diff(params, signal) {
+    const cwd = assertCwd(params.cwd)
+    const root = await resolveDiffRoot(cwd, params.repoRoot, signal)
     const baselineTree = assertTree(params.baselineTree, 'Baseline tree')
     const currentTree = assertTree(params.currentTree, 'Current tree')
     if (!baselineTree || !currentTree) {
