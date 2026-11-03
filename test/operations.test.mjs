@@ -408,7 +408,6 @@ test('branch commits are returned newest first with branch identity', async (t) 
   assert.deepEqual(result.commits.map((commit) => commit.subject), [
     'newest',
     'middle',
-    'oldest',
   ])
   assert.match(result.commits[0].sha, /^[0-9a-f]{40}$/)
 })

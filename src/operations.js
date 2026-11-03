@@ -738,6 +738,9 @@ export function createOperations(deps) {
       ], { cwd: root, signal }),
     ])
     let commits = parseCommitLog(log.stdout)
+    // Root commits represent repository initialization, not a reviewable
+    // change, so local history starts from the first child commit.
+    commits = commits.filter((commit) => commit.parents.length > 0)
     const truncated = commits.length > options.maxCommits
     if (truncated) commits = commits.slice(0, options.maxCommits)
     commits.sort((left, right) => (
