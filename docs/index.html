@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="light dark">
     <title>Working Changes · DSH Plugin</title>
-    <meta name="description" content="See the current DSH session's Git changes and inspect each diff in the native right sidebar.">
+    <meta name="description" content="Inspect the current DSH session's Git changes and browse local branch history in the native right sidebar.">
     <style>
       :root {
         --paper: #f4f1e8;
@@ -249,8 +249,8 @@
       <div class="eyebrow">DeepSeek Harness · DSH Plugin</div>
       <h1>Working Changes</h1>
       <p class="lede">
-        在一个或多个 Git 仓库中查看当前改动。Hover 查看文件明细，点击在右侧栏打开 diff。
-        只读，不打断当前工作流。
+        在当前 Session 的一个或多个 Git 仓库中查看未提交改动，并从同一个下拉浏览
+        本地分支的 Git log。只读，不打断当前工作流。
       </p>
       <div class="actions">
         <a class="button primary" href="https://github.com/xuex991/dsh-working-changes">GitHub 源码</a>
@@ -259,21 +259,22 @@
 
       <section class="feature" aria-labelledby="changed-file-ui-title">
         <div class="feature-copy">
-          <div class="feature-kicker">New in v0.3.0</div>
-          <h2 id="changed-file-ui-title">变更文件数 UI</h2>
+          <div class="feature-kicker">New in v0.4.0</div>
+          <h2 id="changed-file-ui-title">Session 内 Git log</h2>
           <p>
-            用更清晰的层级文件树浏览所有变更。只展示真正包含改动文件的目录，
-            支持折叠和按路径搜索，并自动展开匹配文件的父目录。
+            “当前变更”现在可以直接展开。下拉按项目分组列出本地分支和 Commit，
+            选中后查看它相对第一个父 Commit 的文件变更与 diff。
           </p>
-          <pre>Changed files
-  src/
-    components/
-      panel.js
-    client.js
-  README.md</pre>
+          <pre>当前变更
+  backend
+    main · 10fa468
+    initial
+  frontend
+    main · f37e802
+    initial</pre>
         </div>
-        <a href="screenshots/multi-panel.png" aria-label="查看变更文件列表截图">
-          <img src="screenshots/multi-panel.png" alt="DSH 右侧栏展示当前工作区的 Git 变更文件">
+        <a href="screenshots/history-picker.png" aria-label="查看 Session Git log 下拉截图">
+          <img src="screenshots/history-picker.png" alt="DSH 右侧栏展示本地分支和 Commit 下拉">
         </a>
       </section>
 
@@ -287,10 +288,11 @@
           <h2>功能</h2>
           <ul>
             <li>当前工作区相对 HEAD 的文件变更</li>
+            <li>按项目浏览本地分支 Git log</li>
+            <li>查看 Commit 相对父提交的文件与 diff</li>
             <li>自动发现并列子仓库并分组展示</li>
             <li>可折叠、可搜索的变更文件树</li>
             <li>文件增删行数与状态</li>
-            <li>原生右侧栏 unified diff</li>
             <li>只读，无 stage / commit / push</li>
           </ul>
         </article>

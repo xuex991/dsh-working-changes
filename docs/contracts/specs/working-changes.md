@@ -3,8 +3,8 @@
 最后核验：2026-11-03
 覆盖：`index.js`, `src/operations.js`, `lib/client.js`, `test/operations.test.mjs`,
 `test/client-tree.test.mjs`
-驱动：在单仓库或多仓库工作区开始 DSH Session，打开“当前变更”，检查 Header、
-Hover、层级文件树、搜索和右侧栏 diff。
+驱动：在单仓库或多仓库工作区开始 DSH Session，打开右侧栏，检查状态筛选、
+层级文件树、搜索和文件 diff；再从 Header 下拉检查本地分支与 Commit。
 
 ## 用户可见行为
 
@@ -16,10 +16,13 @@ Hover、层级文件树、搜索和右侧栏 diff。
 - 多仓库 Header 显示仓库数、文件数、总新增和总删除；Hover 与右侧栏按仓库分组。
 - 右侧栏文件区使用 Codex 风格层级树，只展示包含变更文件的目录；目录可折叠，
   搜索匹配仓库名、新路径或重命名前路径，并自动展开匹配路径的父目录。
+- 每个文件带有 `staged`、`unstaged`、`untracked`、`conflicted` 状态；同一文件
+  可以同时处于已暂存和未暂存状态，右侧栏提供状态筛选和状态数量。
 - 每个 diff 请求携带仓库根、该仓库的 baseline tree 和 current tree。
 - 部分仓库失败时仍返回其他仓库结果；失败仓库显示原因。
 - 无仓库、无 HEAD、仓库全干净、单个仓库不可读时均返回结构化结果，不抛全局错误。
 - 二进制文件列出但不渲染正文；单个 diff 超过 400,000 字符时截断。
+- 文件 diff 仍是工作区相对 `HEAD` 的合并 diff；状态标记不改变 diff 的比较范围。
 
 ## Snapshot 选项
 

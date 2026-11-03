@@ -92,6 +92,48 @@ export function parseNumstat(raw) {
   return stats
 }
 
+export function parsePorcelainStatus(raw) {
+  const parts = String(raw ?? '').split('\0')
+  const entries = new Map()
+  for (let index = 0; index < parts.length;) {
+    const record = parts[index++]
+    if (!record || record.length < 4) continue
+    const x = record[0]
+    const y = record[1]
+    const path = record.slice(3)
+    if (!path) continue
+    const renamed = x === 'R' || x === 'C' || y === 'R' || y === 'C'
+    const oldPath = renamed ? (parts[index++] || null) : null
+    const untracked = x === '?' && y === '?'
+    entries.set(path, {
+      stageStatus: x === ' ' || x === '?' || x === '!' ? null : x,
+      worktreeStatus: y === ' ' || y === '?' || y === '!' ? null : y,
+      untracked,
+      conflicted: x === 'U' || y === 'U' || record.startsWith('AA') || record.startsWith('DD'),
+      oldPath,
+    })
+  }
+  return entries
+}
+
+export function parseCommitLog(raw) {
+  const commits = []
+  for (const chunk of String(raw ?? '').split('\x1e')) {
+    const record = chunk.replace(/^\r?\n/, '')
+    if (!record) continue
+    const fields = record.split('\x1f')
+    if (fields.length < 5 || !/^[0-9a-f]{40,64}$/i.test(fields[0])) continue
+    commits.push({
+      sha: fields[0],
+      parents: fields[1] ? fields[1].split(' ').filter(Boolean) : [],
+      timestamp: Number(fields[2]) || 0,
+      author: fields[3],
+      subject: fields[4],
+    })
+  }
+  return commits
+}
+
 const HUNK_HEADER = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@(.*)$/
 
 export function parseUnifiedDiff(raw) {

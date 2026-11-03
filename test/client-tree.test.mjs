@@ -119,3 +119,45 @@ test('directory status summarizes mixed changes as modified', async () => {
   assert.equal(directoryStatus(src), 'M')
   assert.equal(directoryStatus(docs), 'A')
 })
+
+test('current state filters separate staged, unstaged, untracked, and conflicted files', async () => {
+  const { filterChangeFiles, stateCounts } = await loadClientTestApi()
+  const files = [
+    changeFile('staged.js', 'M', { states: ['staged'] }),
+    changeFile('both.js', 'M', { states: ['staged', 'unstaged'] }),
+    changeFile('new.js', 'A', { states: ['untracked'] }),
+    changeFile('conflict.js', 'U', { states: ['conflicted'] }),
+  ]
+
+  assert.deepEqual(
+    Array.from(filterChangeFiles(files, '', 'staged'), (file) => file.path),
+    ['staged.js', 'both.js'],
+  )
+  assert.deepEqual(
+    Array.from(filterChangeFiles(files, '', 'unstaged'), (file) => file.path),
+    ['both.js'],
+  )
+  assert.deepEqual(
+    Array.from(filterChangeFiles(files, '', 'untracked'), (file) => file.path),
+    ['new.js'],
+  )
+  assert.deepEqual(JSON.parse(JSON.stringify(stateCounts(files))), {
+    all: 4,
+    staged: 2,
+    unstaged: 1,
+    untracked: 1,
+    conflicted: 1,
+  })
+})
+
+test('history keys keep repository and branch identities separate', async () => {
+  const { branchHistoryKey, commitKey } = await loadClientTestApi()
+  assert.notEqual(
+    branchHistoryKey('frontend', 'main'),
+    branchHistoryKey('backend', 'main'),
+  )
+  assert.equal(
+    commitKey('frontend', 'main', 'abc123'),
+    `${branchHistoryKey('frontend', 'main')}\0abc123`,
+  )
+})

@@ -13,17 +13,25 @@ import {
 import {
   GitError,
   gitFailure,
+  parseCommitLog,
   parseNameStatus,
   parseNumstat,
+  parsePorcelainStatus,
   parseUnifiedDiff,
 } from './git.js'
 
 const READ_TIMEOUT = 30000
 const REPO_TIMEOUT = 15000
 const DIFF_MAX_CHARS = 400000
+const MAX_BRANCHES = 200
+const MAX_BRANCH_COMMITS = 500
 const TREE_HASH = /^[0-9a-f]{40,64}$/
-const EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904'
-const OPS = new Set(['snapshot', 'diff'])
+const COMMIT_HASH = /^[0-9a-f]{40,64}$/i
+const EMPTY_TREES = {
+  sha1: '4b825dc642cb6eb9a060e54bf8d69288fbee4904',
+  sha256: '6ef19b41225c5369f1c104d45d8d85efa9b057b53b14b4b9b939dd74decc5321',
+}
+const OPS = new Set(['snapshot', 'diff', 'history', 'commits', 'commit'])
 const UNTRACKED_MODES = new Set(['list', 'ignore'])
 const IGNORED_DIRS = new Set([
   '.git',
@@ -48,6 +56,8 @@ const DEFAULTS = {
   maxRepos: 20,
   concurrency: 4,
   repoTimeoutMs: REPO_TIMEOUT,
+  maxBranches: MAX_BRANCHES,
+  maxCommits: MAX_BRANCH_COMMITS,
 }
 
 function assertCwd(value) {
@@ -156,6 +166,20 @@ function readOptions(params = {}) {
       120000,
       'repoTimeoutMs',
     ),
+    maxBranches: readInteger(
+      params.maxBranches,
+      DEFAULTS.maxBranches,
+      1,
+      1000,
+      'maxBranches',
+    ),
+    maxCommits: readInteger(
+      params.maxCommits,
+      DEFAULTS.maxCommits,
+      1,
+      5000,
+      'maxCommits',
+    ),
   }
 }
 
@@ -261,6 +285,25 @@ export function createOperations(deps) {
     }
   }
 
+  async function workingTreeStatus(root, untracked, signal) {
+    const result = await runGit([
+      'status',
+      '--porcelain=v1',
+      '-z',
+      untracked === 'ignore' ? '--untracked-files=no' : '--untracked-files=all',
+    ], { cwd: root, signal })
+    return parsePorcelainStatus(result.stdout)
+  }
+
+  function fileStates(status) {
+    if (status?.conflicted) return ['conflicted']
+    if (status?.untracked) return ['untracked']
+    const states = []
+    if (status?.stageStatus) states.push('staged')
+    if (status?.worktreeStatus) states.push('unstaged')
+    return states.length > 0 ? states : ['unstaged']
+  }
+
   async function captureWorkingTree(root, untracked, signal) {
     const temp = await mkdtemp(join(tmpdir(), 'dsh-session-changes-'))
     const env = { GIT_INDEX_FILE: join(temp, 'index') }
@@ -299,7 +342,15 @@ export function createOperations(deps) {
       allowFailure: true,
     })
     if (result.code === 0 && result.stdout.trim()) return result.stdout.trim()
-    return EMPTY_TREE
+    return emptyTree(root, signal)
+  }
+
+  async function emptyTree(root, signal) {
+    const format = await runGit(['rev-parse', '--show-object-format'], {
+      cwd: root,
+      signal,
+    })
+    return EMPTY_TREES[format.stdout.trim()] || EMPTY_TREES.sha1
   }
 
   async function changeList(root, baselineTree, currentTree, signal) {
@@ -421,8 +472,9 @@ export function createOperations(deps) {
     }))
   }
 
-  function enrichFiles(repo, files) {
+  function enrichFiles(repo, files, statuses) {
     return files.map((file) => {
+      const status = statuses?.get(file.path) || statuses?.get(file.oldPath) || null
       const relPath = repo.relPath === '.'
         ? file.path
         : `${repo.relPath}/${file.path}`
@@ -438,6 +490,11 @@ export function createOperations(deps) {
         relPath,
         workspacePath: relPath,
         oldRelPath,
+        stageStatus: status?.stageStatus || null,
+        worktreeStatus: status?.worktreeStatus || null,
+        untracked: Boolean(status?.untracked),
+        conflicted: Boolean(status?.conflicted),
+        states: fileStates(status),
       }
     })
   }
@@ -445,13 +502,16 @@ export function createOperations(deps) {
   async function snapshotRepository(workspace, repo, options, parentSignal) {
     const timed = repoSignal(parentSignal, options.repoTimeoutMs)
     try {
-      const branch = await branchName(repo.root, timed.signal)
-      const baselineTree = await headTree(repo.root, timed.signal)
-      const currentTree = await captureWorkingTree(repo.root, options.untracked, timed.signal)
+      const [branch, baselineTree, currentTree, statuses] = await Promise.all([
+        branchName(repo.root, timed.signal),
+        headTree(repo.root, timed.signal),
+        captureWorkingTree(repo.root, options.untracked, timed.signal),
+        workingTreeStatus(repo.root, options.untracked, timed.signal),
+      ])
       const files = baselineTree === currentTree
         ? []
         : await changeList(repo.root, baselineTree, currentTree, timed.signal)
-      const enriched = enrichFiles(repo, files)
+      const enriched = enrichFiles(repo, files, statuses)
       return {
         id: repo.id,
         name: repo.name,
@@ -556,6 +616,200 @@ export function createOperations(deps) {
     }
   }
 
+  async function historyRepository(workspace, repo, options, parentSignal) {
+    const timed = repoSignal(parentSignal, options.repoTimeoutMs)
+    try {
+      const [branch, refs] = await Promise.all([
+        branchName(repo.root, timed.signal),
+        runGit([
+          'for-each-ref',
+          '--format=%(refname:short)%1f%(objectname)%1f%(committerdate:unix)%1f%(subject)%1e',
+          'refs/heads',
+        ], { cwd: repo.root, signal: timed.signal }),
+      ])
+      const branches = []
+      for (const chunk of refs.stdout.split('\x1e')) {
+        const record = chunk.replace(/^\r?\n/, '')
+        if (!record) continue
+        const fields = record.split('\x1f')
+        if (fields.length < 4 || !fields[0] || !COMMIT_HASH.test(fields[1])) continue
+        branches.push({
+          name: fields[0],
+          sha: fields[1],
+          timestamp: Number(fields[2]) || 0,
+          subject: fields[3],
+          current: !branch.detached && fields[0] === branch.branch,
+        })
+      }
+      branches.sort((left, right) => (
+        Number(right.current) - Number(left.current) ||
+        right.timestamp - left.timestamp ||
+        left.name.localeCompare(right.name)
+      ))
+      const truncated = branches.length > options.maxBranches
+      if (truncated) branches.length = options.maxBranches
+      return {
+        id: repo.id,
+        name: repo.name,
+        relPath: repo.relPath,
+        root: repo.root,
+        branch: branch.branch,
+        detached: branch.detached,
+        branches,
+        truncated,
+        error: null,
+        errorCode: null,
+      }
+    } catch (error) {
+      const message = timed.timedOut()
+        ? `Repository history timed out after ${options.repoTimeoutMs}ms.`
+        : (error?.message ? String(error.message) : String(error))
+      return {
+        id: repo.id,
+        name: repo.name,
+        relPath: repo.relPath,
+        root: repo.root,
+        branch: null,
+        detached: false,
+        branches: [],
+        truncated: false,
+        error: message.slice(0, 4000),
+        errorCode: timed.timedOut() ? 'timeout' : (error?.code || 'git-failed'),
+      }
+    } finally {
+      timed.cleanup()
+    }
+  }
+
+  async function history(params, signal) {
+    const cwd = assertCwd(params.cwd)
+    const options = readOptions(params)
+    const discovery = await discoverRepositories(cwd, options, signal)
+    const repositories = applyRepoMetadata(cwd, discovery.roots, options)
+    const repos = await mapLimit(
+      repositories,
+      options.concurrency,
+      (repo) => historyRepository(cwd, repo, options, signal),
+    )
+    const failures = repos.filter((repo) => repo.error)
+    const successes = repos.filter((repo) => !repo.error)
+    return {
+      repos,
+      workspace: {
+        root: cwd,
+        rootIsRepo: discovery.rootIsRepo,
+        multiRepo: !discovery.rootIsRepo,
+        repositoryCount: repos.length,
+        failedCount: failures.length,
+        truncated: discovery.truncated || repos.some((repo) => repo.truncated),
+        partial: failures.length > 0 && successes.length > 0,
+        allFailed: repos.length > 0 && successes.length === 0,
+      },
+      capturedAt: Date.now(),
+    }
+  }
+
+  async function branchCommits(params, signal) {
+    const cwd = assertCwd(params.cwd)
+    const root = await resolveDiffRoot(cwd, params.repoRoot, signal)
+    const branch = typeof params.branch === 'string' ? params.branch.trim() : ''
+    if (!branch || branch.includes('\0')) {
+      throw new GitError('A local branch name is required.', { code: 'invalid-params' })
+    }
+    const ref = `refs/heads/${branch}`
+    const exists = await runGit(['show-ref', '--verify', '--quiet', ref], {
+      cwd: root,
+      signal,
+      allowFailure: true,
+    })
+    if (exists.code !== 0) {
+      throw new GitError(`Local branch not found: ${branch}`, { code: 'not-found' })
+    }
+    const options = readOptions(params)
+    const [head, totalResult, log] = await Promise.all([
+      runGit(['rev-parse', ref], { cwd: root, signal }),
+      runGit(['rev-list', '--count', ref], { cwd: root, signal }),
+      runGit([
+        'log',
+        '--date-order',
+        `--max-count=${options.maxCommits + 1}`,
+        '--format=%H%x1f%P%x1f%ct%x1f%an%x1f%s%x1e',
+        ref,
+      ], { cwd: root, signal }),
+    ])
+    let commits = parseCommitLog(log.stdout)
+    const truncated = commits.length > options.maxCommits
+    if (truncated) commits = commits.slice(0, options.maxCommits)
+    commits.sort((left, right) => (
+      right.timestamp - left.timestamp ||
+      right.sha.localeCompare(left.sha)
+    ))
+    return {
+      branch,
+      sha: head.stdout.trim(),
+      commits,
+      total: Number(totalResult.stdout.trim()) || commits.length,
+      truncated,
+      capturedAt: Date.now(),
+    }
+  }
+
+  async function commitView(params, signal) {
+    const cwd = assertCwd(params.cwd)
+    const root = await resolveDiffRoot(cwd, params.repoRoot, signal)
+    const requested = typeof params.commit === 'string' ? params.commit.trim() : ''
+    if (!COMMIT_HASH.test(requested)) {
+      throw new GitError('commit must be a full Git commit hash.', { code: 'invalid-params' })
+    }
+    const resolved = await runGit(['rev-parse', '--verify', `${requested}^{commit}`], {
+      cwd: root,
+      signal,
+      allowFailure: true,
+    })
+    if (resolved.code !== 0 || !resolved.stdout.trim()) {
+      throw new GitError(`Commit not found: ${requested}`, { code: 'not-found' })
+    }
+    const sha = resolved.stdout.trim()
+    const log = await runGit([
+      'show',
+      '-s',
+      '--format=%H%x1f%P%x1f%ct%x1f%an%x1f%s%x1e',
+      sha,
+    ], { cwd: root, signal })
+    const metadata = parseCommitLog(log.stdout)[0]
+    if (!metadata) {
+      throw new GitError(`Could not read commit metadata: ${sha}`, { code: 'git-failed' })
+    }
+    const treeResult = await runGit(['rev-parse', `${sha}^{tree}`], { cwd: root, signal })
+    let baselineTree = await emptyTree(root, signal)
+    if (metadata.parents[0]) {
+      const parentTree = await runGit([
+        'rev-parse',
+        `${metadata.parents[0]}^{tree}`,
+      ], { cwd: root, signal, allowFailure: true })
+      if (parentTree.code === 0 && parentTree.stdout.trim()) {
+        baselineTree = parentTree.stdout.trim()
+      }
+    }
+    const currentTree = treeResult.stdout.trim()
+    const files = baselineTree === currentTree
+      ? []
+      : await changeList(root, baselineTree, currentTree, signal)
+    return {
+      repoRoot: root,
+      commit: {
+        ...metadata,
+        shortSha: metadata.sha.slice(0, 7),
+        parentCount: metadata.parents.length,
+        isMerge: metadata.parents.length > 1,
+      },
+      baselineTree,
+      currentTree,
+      files,
+      summary: summaryOf(files),
+    }
+  }
+
   async function resolveDiffRoot(cwd, requestedRoot, signal) {
     if (requestedRoot === undefined || requestedRoot === null || requestedRoot === '') {
       const resolved = await findRepoRoot(cwd, signal)
@@ -640,9 +894,11 @@ export function createOperations(deps) {
       if (!OPS.has(op)) {
         throw new GitError(`Unknown operation: ${String(op)}`, { code: 'invalid-params' })
       }
-      return op === 'snapshot'
-        ? snapshot(params, signal)
-        : diff(params, signal)
+      if (op === 'snapshot') return snapshot(params, signal)
+      if (op === 'diff') return diff(params, signal)
+      if (op === 'history') return history(params, signal)
+      if (op === 'commits') return branchCommits(params, signal)
+      return commitView(params, signal)
     },
   }
 }

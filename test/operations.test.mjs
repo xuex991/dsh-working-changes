@@ -280,6 +280,196 @@ test('untracked ignore mode leaves new files out of the snapshot', async (t) => 
   assert.equal(ignored.files.length, 0)
 })
 
+test('snapshot distinguishes staged, unstaged, untracked, and conflicted files', async (t) => {
+  const statusRoot = await mkdtemp(join(tmpdir(), 'dsh-status-state-test-'))
+  const conflictRoot = await mkdtemp(join(tmpdir(), 'dsh-conflict-state-test-'))
+  t.after(() => Promise.all([
+    rm(statusRoot, { recursive: true, force: true }),
+    rm(conflictRoot, { recursive: true, force: true }),
+  ]))
+  await initRepo(statusRoot, {
+    'both.txt': 'both\n',
+    'staged.txt': 'before\n',
+  })
+  await git(['add', '.'], { cwd: statusRoot })
+  await git(['commit', '-qm', 'initial'], { cwd: statusRoot })
+
+  await writeFile(join(statusRoot, 'staged.txt'), 'staged\n')
+  await writeFile(join(statusRoot, 'both.txt'), 'staged both\n')
+  await git(['add', 'staged.txt', 'both.txt'], { cwd: statusRoot })
+  await writeFile(join(statusRoot, 'both.txt'), 'staged then changed again\n')
+  await writeFile(join(statusRoot, 'untracked.txt'), 'untracked\n')
+
+  await initRepo(conflictRoot, { 'conflict.txt': 'base\n' })
+  await git(['add', '.'], { cwd: conflictRoot })
+  await git(['commit', '-qm', 'initial'], { cwd: conflictRoot })
+  const defaultBranch = (await git(['symbolic-ref', '--short', 'HEAD'], {
+    cwd: conflictRoot,
+  })).stdout.trim()
+  await git(['switch', '-qc', 'conflict-branch'], { cwd: conflictRoot })
+  await writeFile(join(conflictRoot, 'conflict.txt'), 'branch\n')
+  await git(['add', 'conflict.txt'], { cwd: conflictRoot })
+  await git(['commit', '-qm', 'branch conflict'], { cwd: conflictRoot })
+  await git(['switch', '-q', defaultBranch], { cwd: conflictRoot })
+  await writeFile(join(conflictRoot, 'conflict.txt'), 'main\n')
+  await git(['add', 'conflict.txt'], { cwd: conflictRoot })
+  await git(['commit', '-qm', 'main conflict'], { cwd: conflictRoot })
+  const merge = await git(['merge', 'conflict-branch'], { cwd: conflictRoot })
+  assert.notEqual(merge.code, 0)
+
+  const operations = createOperations({ exec })
+  const statusSnapshot = await operations.handle('snapshot', { cwd: statusRoot })
+  const conflictSnapshot = await operations.handle('snapshot', { cwd: conflictRoot })
+  const file = (path) => statusSnapshot.files.find((entry) => entry.path === path)
+
+  assert.deepEqual(file('staged.txt').states, ['staged'])
+  assert.equal(file('staged.txt').stageStatus, 'M')
+  assert.deepEqual(file('both.txt').states, ['staged', 'unstaged'])
+  assert.equal(file('both.txt').stageStatus, 'M')
+  assert.equal(file('both.txt').worktreeStatus, 'M')
+  assert.deepEqual(file('untracked.txt').states, ['untracked'])
+  const conflict = conflictSnapshot.files.find((entry) => entry.path === 'conflict.txt')
+  assert.deepEqual(conflict.states, ['conflicted'])
+  assert.equal(conflict.conflicted, true)
+})
+
+test('history lists local branches per repository and excludes remotes', async (t) => {
+  const workspace = await mkdtemp(join(tmpdir(), 'dsh-history-branches-test-'))
+  t.after(() => rm(workspace, { recursive: true, force: true }))
+  const frontend = join(workspace, 'frontend')
+  const backend = join(workspace, 'backend')
+  await commitRepo(frontend, { 'app.js': 'front\n' })
+  await commitRepo(backend, { 'server.js': 'server\n' })
+  const defaultBranch = (await git(['symbolic-ref', '--short', 'HEAD'], { cwd: frontend })).stdout.trim()
+  await git(['switch', '-qc', 'feature/ui'], { cwd: frontend })
+  await writeFile(join(frontend, 'app.js'), 'feature\n')
+  await git(['add', 'app.js'], { cwd: frontend })
+  await git(['commit', '-qm', 'feature work'], { cwd: frontend })
+  const head = (await git(['rev-parse', 'HEAD'], { cwd: frontend })).stdout.trim()
+  await git(['update-ref', 'refs/remotes/origin/remote-only', head], { cwd: frontend })
+
+  const operations = createOperations({ exec })
+  const history = await operations.handle('history', { cwd: workspace })
+
+  assert.equal(history.repos.length, 2)
+  const front = history.repos.find((repo) => repo.name === 'frontend')
+  const back = history.repos.find((repo) => repo.name === 'backend')
+  assert.deepEqual(front.branches.map((branch) => branch.name), ['feature/ui', defaultBranch])
+  assert.equal(front.branch, 'feature/ui')
+  assert.deepEqual(front.branches.map((branch) => branch.current), [true, false])
+  assert.deepEqual(back.branches.map((branch) => branch.name), [defaultBranch])
+  assert.equal(history.repos.some((repo) => repo.branches.some((branch) => (
+    branch.name.includes('origin/')
+  ))), false)
+})
+
+test('branch commits are returned newest first with branch identity', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'dsh-history-commits-test-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  await initRepo(root, { 'file.txt': 'one\n' })
+  const defaultBranch = (await git(['symbolic-ref', '--short', 'HEAD'], { cwd: root })).stdout.trim()
+  await git(['add', 'file.txt'], { cwd: root })
+  await git(['commit', '-qm', 'oldest'], {
+    cwd: root,
+    env: {
+      GIT_AUTHOR_DATE: '2026-11-03T01:00:00Z',
+      GIT_COMMITTER_DATE: '2026-11-03T01:00:00Z',
+    },
+  })
+  await writeFile(join(root, 'file.txt'), 'two\n')
+  await git(['add', 'file.txt'], { cwd: root })
+  await git(['commit', '-qm', 'middle'], {
+    cwd: root,
+    env: {
+      GIT_AUTHOR_DATE: '2026-11-03T02:00:00Z',
+      GIT_COMMITTER_DATE: '2026-11-03T02:00:00Z',
+    },
+  })
+  await writeFile(join(root, 'file.txt'), 'three\n')
+  await git(['add', 'file.txt'], { cwd: root })
+  await git(['commit', '-qm', 'newest'], {
+    cwd: root,
+    env: {
+      GIT_AUTHOR_DATE: '2026-11-03T03:00:00Z',
+      GIT_COMMITTER_DATE: '2026-11-03T03:00:00Z',
+    },
+  })
+
+  const operations = createOperations({ exec })
+  const result = await operations.handle('commits', {
+    cwd: root,
+    repoRoot: root,
+    branch: defaultBranch,
+  })
+
+  assert.equal(result.branch, defaultBranch)
+  assert.equal(result.total, 3)
+  assert.equal(result.truncated, false)
+  assert.deepEqual(result.commits.map((commit) => commit.subject), [
+    'newest',
+    'middle',
+    'oldest',
+  ])
+  assert.match(result.commits[0].sha, /^[0-9a-f]{40}$/)
+})
+
+test('commit view compares against the first parent', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'dsh-history-commit-view-test-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  await initRepo(root, { 'keep.txt': 'same\n', 'other.txt': 'base\n' })
+  await git(['add', '.'], { cwd: root })
+  await git(['commit', '-qm', 'root'], { cwd: root })
+  await writeFile(join(root, 'other.txt'), 'changed\n')
+  await writeFile(join(root, 'added.txt'), 'added\n')
+  await git(['add', '.'], { cwd: root })
+  await git(['commit', '-qm', 'second commit'], { cwd: root })
+  const sha = (await git(['rev-parse', 'HEAD'], { cwd: root })).stdout.trim()
+
+  const operations = createOperations({ exec })
+  const result = await operations.handle('commit', {
+    cwd: root,
+    repoRoot: root,
+    commit: sha,
+  })
+
+  assert.equal(result.commit.subject, 'second commit')
+  assert.equal(result.commit.isMerge, false)
+  assert.deepEqual(result.files.map((file) => [file.path, file.status]), [
+    ['added.txt', 'A'],
+    ['other.txt', 'M'],
+  ])
+  const diff = await operations.handle('diff', {
+    cwd: root,
+    repoRoot: root,
+    baselineTree: result.baselineTree,
+    currentTree: result.currentTree,
+    path: 'other.txt',
+  })
+  assert.deepEqual(
+    diff.hunks[0].lines.filter((line) => line.kind !== 'ctx').map((line) => [line.kind, line.text]),
+    [['del', 'base'], ['add', 'changed']],
+  )
+})
+
+test('root commit compares against the empty tree', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'dsh-history-root-commit-test-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  await commitRepo(root, { 'root.txt': 'first\n' })
+  const sha = (await git(['rev-parse', 'HEAD'], { cwd: root })).stdout.trim()
+
+  const operations = createOperations({ exec })
+  const result = await operations.handle('commit', {
+    cwd: root,
+    repoRoot: root,
+    commit: sha,
+  })
+
+  assert.equal(result.baselineTree, '4b825dc642cb6eb9a060e54bf8d69288fbee4904')
+  assert.deepEqual(result.files.map((file) => [file.path, file.status]), [
+    ['root.txt', 'A'],
+  ])
+})
+
 test('invalid operations and paths are rejected', async (t) => {
   const root = await repoFixture()
   t.after(() => rm(root, { recursive: true, force: true }))

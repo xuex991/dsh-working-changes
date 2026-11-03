@@ -6,9 +6,10 @@
 [![GitHub release](https://img.shields.io/github/v/release/xuex991/dsh-working-changes)](https://github.com/xuex991/dsh-working-changes/releases)
 [![License](https://img.shields.io/github/license/xuex991/dsh-working-changes)](LICENSE)
 
-A small, read-only DSH plugin that shows what the current session has changed.
-It works for a single Git repository and for container workspaces containing
-multiple independent repositories.
+A small, read-only DSH plugin that shows what the current session has changed
+and lets you browse local branch history across its Git repositories. It works
+for a single repository and for container workspaces containing multiple
+independent repositories.
 
 ![Hover summary](docs/screenshots/hover.png)
 
@@ -25,12 +26,17 @@ multiple independent repositories.
   itself a Git repository.
 - Shows `repositories · files · +insertions −deletions` for multi-repository
   workspaces and groups files by repository.
+- Separates working changes into staged, unstaged, untracked, and conflicted states.
 - Hovering the summary lists changed files with per-file line counts.
 - Clicking the summary or a file opens the native DSH right sidebar.
 - Renders unified diffs with line numbers and platform diff colors.
 - Supports file filtering, status badges, renames, binary files, and refresh.
 - Shows a Codex-style collapsible file tree with path search; only directories
   that contain changed files are included.
+- Adds a revision picker that opens from Current changes and lists every local
+  branch and commit in each repository, newest first.
+- Opens each selected commit against its first parent and lets you inspect the
+  changed files and their diffs.
 - Refreshes after an Agent turn, on window focus, and on demand.
 - Read-only: no stage, commit, branch, stash, push, pull, or worktree actions.
 
@@ -61,7 +67,11 @@ Then open **Working Changes** from the discovery page.
 ### Limits
 
 - The current worktree is compared with `HEAD`; staged and unstaged states are
-  intentionally combined.
+  labeled separately, while the file diff remains the combined worktree-to-HEAD diff.
+- History reads local branches only. Remote branches, push status, and push
+  events are not shown.
+- History shows at most 200 local branches per repository and 500 commits per
+  branch, with an explicit truncation notice.
 - Binary files are listed but not rendered as text.
 - One diff is capped at 400,000 characters.
 - Submodule contents are not expanded.
@@ -76,11 +86,14 @@ Then open **Working Changes** from the discovery page.
 - 在会话顶部显示 `分支 · 更改文件数 · +新增行 −删除行`。
 - 工作区根目录不是 Git 仓库时，自动发现其下并列的独立仓库。
 - 多仓库时显示 `仓库数 · 文件数 · +新增行 −删除行`，并按仓库分组。
+- 当前变更区分已暂存、未暂存、未跟踪和冲突状态。
 - Hover 总览，直接查看每个文件改了多少行。
 - 点击总览或文件，在 DSH 原生右侧栏查看 unified diff。
 - 支持文件筛选、状态标记、重命名、二进制文件和手动刷新。
 - 使用 Codex 风格的层级文件树，支持按路径搜索和目录折叠，只展示包含变更
   文件的目录。
+- 从“当前变更”下拉直接选择本地分支 Commit，按项目分组并按时间倒序加载。
+- 选中 Commit 后查看它相对第一个父提交的文件变更，并可继续打开文件 diff。
 - Agent 每轮结束、窗口重新聚焦和手动刷新时更新。
 - 只读：没有暂存、提交、切分支、stash、push、pull 或 worktree 操作。
 
@@ -105,7 +118,9 @@ https://xuex991.github.io/dsh-working-changes/index.json
 
 ### 说明
 
-- 这是当前会话工作区相对 `HEAD` 的变更，不区分 staged / unstaged。
+- 当前文件状态区分 staged / unstaged，但文件 diff 仍比较完整工作区与 `HEAD`。
+- 历史只读取本地分支，不展示远程分支、Push 状态或 Push 事件。
+- 每个仓库最多读取 200 个本地分支，每个分支最多读取 500 个 Commit，超出时明确提示截断。
 - 二进制文件只显示在文件列表里，不渲染正文。
 - 单个 diff 最多显示 400,000 字符。
 - 不展开 submodule 内容。
@@ -141,6 +156,7 @@ node --check src/operations.js
 node --check lib/client.js
 ```
 
-The Host RPC is exposed at `POST /api/session-changes`. A temporary
-`GIT_INDEX_FILE` represents the worktree as a Git tree, so the plugin never
-reads or modifies the user's real index.
+The Host RPC is exposed at `POST /api/session-changes` with `snapshot`, `diff`,
+`history`, `commits`, and `commit` operations. A temporary `GIT_INDEX_FILE`
+represents the worktree as a Git tree, so the plugin never modifies the user's
+real index.
