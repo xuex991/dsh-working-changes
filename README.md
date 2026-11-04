@@ -61,6 +61,9 @@ https://xuex991.github.io/dsh-working-changes/index.json
 
 Then open **Working Changes** from the discovery page.
 
+All xue1991 DSH plugins and their stable install entry points are also listed at
+[xuex991.github.io/dsh-working-changes](https://xuex991.github.io/dsh-working-changes/).
+
 ### Requirements
 
 - DeepSeek Harness `0.2.1-rc.2` or newer.
@@ -119,6 +122,9 @@ https://xuex991.github.io/dsh-working-changes/index.json
 ```
 
 安装后，在发现页找到 **当前变更**。
+
+两个插件的最新版本和安装入口统一列在
+[xuex991.github.io/dsh-working-changes](https://xuex991.github.io/dsh-working-changes/)。
 
 ### 说明
 

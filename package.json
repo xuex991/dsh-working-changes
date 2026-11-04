@@ -57,7 +57,8 @@
     "workspace"
   ],
   "scripts": {
-    "test": "node --test test/*.test.mjs"
+    "test": "node --test test/*.test.mjs",
+    "catalog:sync": "node scripts/sync-plugin-index.mjs"
   },
   "license": "MIT"
 }
