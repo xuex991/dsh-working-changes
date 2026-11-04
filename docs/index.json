@@ -28,14 +28,45 @@
       "versions": [
         {
           "version": "0.5.3",
-          "publishTimestamp": 1793696844,
+          "publishTimestamp": 1793800159,
           "source": {
             "type": "git",
             "url": "https://github.com/xuex991/dsh-working-changes",
-            "commit": "f643c2ac5fe5e87a3571af9a7eb149396b504fc1"
+            "commit": "5358b5f2a180565a3b71ad71a53d2a7099e37550"
           },
           "engines": {
             "dsh": ">=0.2.1-rc.2"
+          }
+        }
+      ]
+    },
+    {
+      "name": "dsh-readable-output",
+      "title": {
+        "en": "Readable Output",
+        "zh": "可读输出"
+      },
+      "description": {
+        "en": "Adds an always-on output contract for direct, concise answers in the DSH system prompt.",
+        "zh": "为 DSH system prompt 增加始终生效的输出约定：先答结论、少术语、简洁且明确标注不确定性。"
+      },
+      "icon": "icons/readable-output.svg",
+      "author": "xue1991",
+      "homepage": "https://github.com/xuex991/dsh-readable-output#readme",
+      "repository": {
+        "url": "https://github.com/xuex991/dsh-readable-output"
+      },
+      "versions": [
+        {
+          "version": "0.1.0",
+          "publishTimestamp": 1793800159,
+          "source": {
+            "type": "git",
+            "url": "https://github.com/xuex991/dsh-readable-output",
+            "commit": "50a626579af8ec8e5d45aab51dac4676885c4d32"
+          },
+          "engines": {
+            "dsh": ">=0.1.0-rc.6"
           }
         }
       ]
