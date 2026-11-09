@@ -141,6 +141,8 @@ export function parseUnifiedDiff(raw) {
   let current = null
   let oldLine = 0
   let newLine = 0
+  let oldRemaining = 0
+  let newRemaining = 0
   let additions = 0
   let deletions = 0
   let binary = false
@@ -158,15 +160,23 @@ export function parseUnifiedDiff(raw) {
     if (header) {
       oldLine = Number(header[1])
       newLine = Number(header[3])
+      // A bare count in the header means 1; the declared counts are the only
+      // reliable end-of-hunk signal, because the trailing newline of the diff
+      // (and any trailing blank line) would otherwise be read as context.
+      oldRemaining = header[2] === undefined ? 1 : Number(header[2])
+      newRemaining = header[4] === undefined ? 1 : Number(header[4])
       current = { header: line, lines: [] }
       hunks.push(current)
       continue
     }
     if (!current) continue
+    if (oldRemaining <= 0 && newRemaining <= 0) continue
     if (line === '') {
       current.lines.push({ kind: 'ctx', text: '', old: oldLine, new: newLine })
       oldLine += 1
       newLine += 1
+      oldRemaining -= 1
+      newRemaining -= 1
       continue
     }
     const marker = line[0]
@@ -174,14 +184,18 @@ export function parseUnifiedDiff(raw) {
       current.lines.push({ kind: 'add', text: line.slice(1), new: newLine })
       additions += 1
       newLine += 1
+      newRemaining -= 1
     } else if (marker === '-') {
       current.lines.push({ kind: 'del', text: line.slice(1), old: oldLine })
       deletions += 1
       oldLine += 1
+      oldRemaining -= 1
     } else if (marker === ' ') {
       current.lines.push({ kind: 'ctx', text: line.slice(1), old: oldLine, new: newLine })
       oldLine += 1
       newLine += 1
+      oldRemaining -= 1
+      newRemaining -= 1
     } else if (marker === '\\') {
       current.lines.push({ kind: 'meta', text: line })
     }
