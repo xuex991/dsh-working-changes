@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="light dark">
     <title>xue1991 · DSH Plugins</title>
-    <meta name="description" content="xue1991 的 DeepSeek Harness 插件公开安装页：当前变更与可读输出。">
+    <meta name="description" content="xue1991 的 DeepSeek Harness 插件公开安装页：当前变更与可读输出，同一套安装与更新方式。">
     <style>
       :root {
         --paper: #f2f0e7;
@@ -438,9 +438,10 @@
           <h1>换台机器，<br>也能继续用。</h1>
         </div>
         <div class="hero-copy">
-          <strong>一个地址，两个插件。</strong>
+          <strong>一个地址，两个插件，同一套安装方式。</strong>
           <p>
-            这里放稳定安装入口和最新版本。下次在新机器上打开本页，复制市场索引或安装命令即可。
+            当前变更负责看代码，可读输出负责管表达。下次在新机器上打开本页，
+            复制市场索引或任意一条安装命令即可。
           </p>
         </div>
       </header>
@@ -465,22 +466,25 @@
               </div>
             </div>
             <p class="plugin-desc">
-              在 DSH 会话顶部查看未提交改动，浏览本 Session 的本地分支 Commit，
-              并从原生右侧栏打开文件 diff。
+              在 DSH 会话里看清「我在哪个分支、改了什么、本 Session 提交了什么」。
+              支持一个工作区下多个子项目，按仓库分组显示分支、文件状态和 +/−，
+              并能从历史下拉查看本 Session 各本地分支的 Commit 与内容 diff。
             </p>
             <div class="tags">
               <span class="tag">只读</span>
-              <span class="tag">多仓库</span>
+              <span class="tag">多子项目</span>
+              <span class="tag">Session 提交</span>
               <span class="tag">Commit diff</span>
             </div>
           </div>
           <div class="install">
-            <p class="install-label"><span>在「插件 → 添加插件」中输入</span></p>
+            <p class="install-label"><span>命令行安装 / 更新</span></p>
             <div class="command">
-              <code>https://github.com/xuex991/dsh-working-changes</code>
-              <button class="copy" type="button" data-copy="https://github.com/xuex991/dsh-working-changes">复制</button>
+              <code>dsh plugin --profile desktop add -w 'github:xuex991/dsh-working-changes'</code>
+              <button class="copy" type="button" data-copy="dsh plugin --profile desktop add -w 'github:xuex991/dsh-working-changes'">复制</button>
             </div>
             <div class="alternative">
+              <span>或在「插件 → 添加插件」输入仓库地址</span>
               <a href="https://github.com/xuex991/dsh-working-changes">查看源码</a>
               <a href="https://github.com/xuex991/dsh-working-changes/releases">发布记录</a>
               <span>需 DSH ≥ 0.2.1-rc.2</span>
@@ -531,9 +535,9 @@
             <p>在 DSH「发现 → 索引源」保留本页地址。索引会指向当前插件版本，不需要换链接。</p>
           </article>
           <article class="step">
-            <span>02 / CLI 插件</span>
+            <span>02 / 两个插件</span>
             <strong>重复安装命令</strong>
-            <p>新机器或在另一台机器更新时，重新执行“可读输出”的 add 命令即可。</p>
+            <p>新机器或更新时，重新执行对应插件的 add 命令即可；两条命令都走同一个市场索引版本。</p>
           </article>
         </div>
       </section>
