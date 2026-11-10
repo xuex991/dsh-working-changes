@@ -74,8 +74,9 @@ All xue1991 DSH plugins and their stable install entry points are also listed at
 - The current worktree is compared with `HEAD`; staged and unstaged states are
   labeled separately, while the file diff remains the combined worktree-to-HEAD diff.
 - History reads local branches only and scopes commits to the current session
-  using each branch's first observed HEAD as a Git ancestry baseline. Remote
-  branches, push status, and push events are not shown.
+  by pinning each branch's baseline at session start from its reflog, so opening
+  the picker late still lists earlier session commits. Remote branches, push
+  status, and push events are not shown.
 - History shows at most 200 local branches per repository and 500 commits per
   branch, with an explicit truncation notice.
 - Binary files are listed but not rendered as text.
@@ -129,8 +130,9 @@ https://xuex991.github.io/dsh-working-changes/index.json
 ### 说明
 
 - 当前文件状态区分 staged / unstaged，但文件 diff 仍比较完整工作区与 `HEAD`。
-- 历史只读取本地分支，并以 Session 首次观察到分支时的 HEAD 作为 Git 祖先基线，
-  只展示之后产生的 Commit；不比较提交时间，也不展示远程分支、Push 状态或 Push 事件。
+- 历史只读取本地分支，并以 Session 创建时各分支的 HEAD（取自分支 reflog）作为
+  Git 祖先基线，只展示之后产生的 Commit；面板晚打开也能看到之前的提交，不展示
+  远程分支、Push 状态或 Push 事件。
 - 每个仓库最多读取 200 个本地分支，每个分支最多读取 500 个 Commit，超出时明确提示截断。
 - 二进制文件只显示在文件列表里，不渲染正文。
 - 单个 diff 最多显示 400,000 字符。

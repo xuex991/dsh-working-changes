@@ -240,14 +240,82 @@ function disambiguateNames(entries) {
   }
 }
 
+// A branch reflog tells us what the branch pointed at when a Session started:
+// the newest ref update at or before that instant. Session commits append newer
+// entries, so the same rule also survives a panel that was opened late.
+function parseReflogBaselines(stdout, sinceSeconds) {
+  const records = new Map()
+  for (const line of String(stdout).split('\n')) {
+    if (!line) continue
+    const fields = line.split('\x1f')
+    if (fields.length < 3) continue
+    const [sha, ref, subject] = fields
+    const match = /^(refs\/heads\/.+)@\{(\d+)\}$/.exec(ref)
+    if (!match || !COMMIT_HASH.test(sha)) continue
+    const name = match[1].slice('refs/heads/'.length)
+    const time = Number(match[2])
+    if (!name || !Number.isFinite(time)) continue
+    let record = records.get(name)
+    if (!record) {
+      record = { before: null, createdFrom: null, oldest: null }
+      records.set(name, record)
+    }
+    record.oldest = sha
+    if (time <= sinceSeconds && (!record.before || time > record.before.time)) {
+      record.before = { sha, time }
+    }
+    if (/^branch: Created from /.test(subject)) record.createdFrom = sha
+  }
+  const baselines = new Map()
+  for (const [name, record] of records) {
+    // A branch born inside the Session has no pre-Session tip; its oldest
+    // reflog entry is the closest thing to "where it started".
+    const sha = record.before?.sha || record.createdFrom || record.oldest
+    if (sha) baselines.set(name, sha)
+  }
+  return baselines
+}
+
 export function createOperations(deps) {
-  const { exec } = deps
+  const { exec, sessionStart } = deps
 
   async function runGit(args, { cwd, signal, env, allowFailure = false, timeoutMs = READ_TIMEOUT }) {
     const argv = ['git', ...args]
     const result = await exec(argv, { cwd, signal, env, timeoutMs })
     if (result.code !== 0 && !allowFailure) throw gitFailure(argv, result)
     return result
+  }
+
+  async function resolveHistorySince(params) {
+    const explicit = Number(params.since)
+    if (Number.isFinite(explicit) && explicit > 0) return explicit
+    if (typeof sessionStart !== 'function') return null
+    const sessionId = typeof params.sessionId === 'string' ? params.sessionId.trim() : ''
+    if (!sessionId) return null
+    try {
+      const value = await sessionStart(sessionId)
+      return Number.isFinite(value) && value > 0 ? value : null
+    } catch {
+      return null
+    }
+  }
+
+  async function readSessionBaselines(root, branches, sinceSeconds, signal) {
+    if (!branches.length || !Number.isFinite(sinceSeconds)) return new Map()
+    try {
+      const args = ['reflog', 'show', '--date=unix', '--format=%H%x1f%gD%x1f%gs']
+      for (const branch of branches) args.push(`refs/heads/${branch.name}`)
+      const result = await runGit(args, {
+        cwd: root,
+        signal,
+        allowFailure: true,
+        timeoutMs: Math.min(READ_TIMEOUT, 15000),
+      })
+      if (result.code !== 0) return new Map()
+      return parseReflogBaselines(result.stdout, sinceSeconds)
+    } catch {
+      return new Map()
+    }
   }
 
   async function findRepoRoot(cwd, signal) {
@@ -639,6 +707,7 @@ export function createOperations(deps) {
           timestamp: Number(fields[2]) || 0,
           subject: fields[3],
           current: !branch.detached && fields[0] === branch.branch,
+          baseline: null,
         })
       }
       branches.sort((left, right) => (
@@ -648,6 +717,15 @@ export function createOperations(deps) {
       ))
       const truncated = branches.length > options.maxBranches
       if (truncated) branches.length = options.maxBranches
+      if (options.sinceSeconds) {
+        const baselines = await readSessionBaselines(
+          repo.root,
+          branches,
+          options.sinceSeconds,
+          timed.signal,
+        )
+        for (const item of branches) item.baseline = baselines.get(item.name) || null
+      }
       return {
         id: repo.id,
         name: repo.name,
@@ -684,12 +762,17 @@ export function createOperations(deps) {
   async function history(params, signal) {
     const cwd = assertCwd(params.cwd)
     const options = readOptions(params)
+    const since = await resolveHistorySince(params)
+    const historyOptions = {
+      ...options,
+      sinceSeconds: since ? Math.floor(since / 1000) : null,
+    }
     const discovery = await discoverRepositories(cwd, options, signal)
     const repositories = applyRepoMetadata(cwd, discovery.roots, options)
     const repos = await mapLimit(
       repositories,
       options.concurrency,
-      (repo) => historyRepository(cwd, repo, options, signal),
+      (repo) => historyRepository(cwd, repo, historyOptions, signal),
     )
     const failures = repos.filter((repo) => repo.error)
     const successes = repos.filter((repo) => !repo.error)

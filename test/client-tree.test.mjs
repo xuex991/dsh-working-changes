@@ -205,6 +205,13 @@ test('history baselines are captured once and preserved across refreshes', async
   assert.equal(refreshed[branchHistoryKey('backend', 'main')], 'b'.repeat(40))
   assert.equal(refreshed[branchHistoryKey('backend', 'feature')], 'd'.repeat(40))
 
+  const fromHost = captureHistoryBaselines(refreshed, {
+    repos: [
+      { id: 'frontend', branches: [{ name: 'main', sha: 'e'.repeat(40), baseline: 'f'.repeat(40) }] },
+    ],
+  })
+  assert.equal(fromHost[branchHistoryKey('frontend', 'main')], 'f'.repeat(40))
+
   assert.equal(
     isSessionBranch(refreshed, {
       repoId: 'frontend',

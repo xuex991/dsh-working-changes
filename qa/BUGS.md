@@ -2,8 +2,8 @@
 
 > 本文件由 `qa/run.mjs` 生成，数据源是 `qa/bugs.mjs`；改清单请改 `qa/bugs.mjs` 再重跑。
 
-- 插件版本：`dsh-working-changes@0.5.3`（HEAD `ff62b5c`）
-- 生成时间：2026/11/9 13:42:49
+- 插件版本：`dsh-working-changes@0.5.4`（HEAD `cb64506`）
+- 生成时间：2026/11/10 17:47:42
 - 断言：8/18 通过
 - 条目：17 条（P0 2 · P1 6 · P2 7 · P3 2）
 
@@ -21,7 +21,7 @@
 | [B8](#b8) | P2 | 渲染 | createStore 的相等短路永远不生效，每次 set 都通知订阅者 | A18 | **已复现** |
 | [B9](#b9) | P2 | Diff 渲染 | 纯重命名文件在详情里退化成“新增”，与列表里的 R 标记不一致 | A3 | **已复现** |
 | [B10](#b10) | P2 | 历史 | 打开版本选择器会对所有分支并发加载 commits | — | 代码证据 |
-| [B11](#b11) | P2 | 历史 | “本 Session 提交”的基线取决于面板何时第一次被打开 | — | 代码证据 |
+| [B11](#b11) | P2 | 历史 | “本 Session 提交”的基线取决于面板何时第一次被打开 | — | 已修复 |
 | [B12](#b12) | P2 | 历史 | 每次刷新清空 branchCommits，已加载的分支提交被丢弃重载 | — | 代码证据 |
 | [B13](#b13) | P3 | 界面 | “capturedAt” 标签显示的其实是 baseline tree 哈希前 7 位 | — | 代码证据 |
 | [B14](#b14) | P3 | 状态 | 冲突文件的 states 只有 conflicted，丢掉 staged/unstaged 维度 | A7 | **已复现** |
@@ -252,8 +252,11 @@
 **证据**：
 - lib/client.js:1122-1136 captureHistoryBaselines 只在缺失时写入
 - lib/client.js:1405-1444 loadHistory 是唯一写基线的地方
+- 实测 session-8eb3e07a 的 sessionStorage 基线被写成 32ca2a1（最后一次提交），历史为空
 
 **修复方向**：在 session 打开（而不是面板打开）时就记录基线；或把基线记录下沉到服务端 session 生命周期，与面板可见性解耦。
+
+**状态**：已修：history 请求携带 sessionId，host 用 SessionHeader.createdAt 作为 Session 开始时刻，再从每个分支的 reflog 取该时刻前的最后一次 ref 更新作为基线（src/operations.js:246-315、index.js:127-132）。面板晚打开或换标签页重开都不影响基线；实测 session-8eb3e07a 恢复出 4 个本 Session 提交。
 
 ## B12
 

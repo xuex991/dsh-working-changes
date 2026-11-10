@@ -1,6 +1,6 @@
 # 能力：本地分支历史
 
-最后核验：2026-11-03
+最后核验：2026-11-10
 覆盖：`index.js`, `src/operations.js`, `lib/client.js`, `test/operations.test.mjs`,
 `test/client-tree.test.mjs`
 驱动：在单仓库或多仓库工作区开始 Session，展开“当前变更”下拉，选择一个本
@@ -11,13 +11,16 @@ Session 内的本地分支 Commit，再打开该 Commit 的文件 diff。
 - Header 的“当前变更”是下拉选择器；首项返回当前未提交变更。
 - 下拉按项目列出 `refs/heads/*` 本地分支，不列出远程分支。
 - 当前分支优先显示并带“当前”标记；其他分支按分支头提交时间倒序。
-- Session 首次观察到一个本地分支时记录该分支 HEAD，作为这个分支的 Session 基线；
-  之后刷新不覆盖已有基线。基线按 Session 和工作区保存在 `sessionStorage`，页面
-  重载后继续使用。
+- Session 基线在 Session 创建时刻确定：取该分支 reflog 中时间不晚于 Session
+  创建时间的最后一次 ref 更新，作为 Git 祖先基线；面板何时打开不影响基线。
+- Session 创建后才出现的新分支，用创建记录（`branch: Created from`）的基点作为基线。
+- 无法从 reflog 取得基线时（reflog 被裁剪或不可用），退回“首次观察到的分支 HEAD”，
+  之后刷新不覆盖。基线按 Session 和工作区保存在 `localStorage`，并兼容读取旧的
+  `sessionStorage`。
 - 打开下拉后读取分支 Commit，只返回当前分支 HEAD 可达、但 Session 基线不可达的
-  Commit（等价于 `git rev-list <head> ^<baseline>`）。范围只使用 Git 祖先关系，
-  不比较 Commit 时间戳。
-- 每个本地分支使用自己的基线；Session 中新建的分支在首次被观察时记录基线。
+  Commit（等价于 `git rev-list <head> ^<baseline>`）。Commit 范围只使用 Git 祖先
+  关系；时间只用于挑选基线，不用于筛选 Commit。
+- 每个本地分支使用自己的基线。
 - 同一会话内保留已加载结果；刷新历史时重新读取列表，但保留原有基线。
 - Commit 下拉项首行显示 `branch · short SHA`，第二行显示提交标题，右侧显示时间。
 - 没有 Session 内 Commit 的分支明确显示“本 Session 暂无提交”。

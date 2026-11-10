@@ -139,16 +139,15 @@ observe({
 observe({
   id: 'O4',
   bug: 'B11',
-  title: '历史基线在“首次 loadHistory”时记录，取决于面板何时被打开',
+  title: '历史基线改由 Session 创建时刻 + 分支 reflog 推导',
   async run() {
-    const source = await readFile(pluginPath('lib/client.js'), 'utf8')
-    const lines = source.split('\n')
     return {
       detail: [
-        'lib/client.js:1122-1131  if (branch.sha && !Object.hasOwn(next, key)) next[key] = branch.sha',
-        'lib/client.js:1423-1427  loadHistory 内才调用 captureHistoryBaselines + 写 sessionStorage',
-        '推论：如果这一轮工作开始时面板没打开过，基线会记在提交之后 → 本 Session 提交列表为空。',
-        'sessionStorage key 含 sessionId + cwd，页面重载可延续；但同一 session 内首次打开过晚无法补救。',
+        'lib/client.js:1424  history 请求携带 sessionId',
+        'index.js:127-132  sessionStart → ctx.sessions.get(id).header.createdAt',
+        'src/operations.js:286-315  resolveHistorySince + readSessionBaselines',
+        'src/operations.js:246-270  parseReflogBaselines 取 since 前最后一次 ref 更新',
+        '结果：面板晚打开或换标签页重开都按同一时刻取基线；reflog 不可用时回退首次观察。',
       ],
     }
   },

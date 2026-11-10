@@ -166,10 +166,16 @@ export const BUGS = [
       '基线在 loadHistory 时按“首次观察到的分支 HEAD”记录；如果首次观察发生在提交之后，' +
       '基线就已经包含这些提交，rev-list ^baseline 自然为空。',
     evidence: ['lib/client.js:1122-1136 captureHistoryBaselines 只在缺失时写入',
-      'lib/client.js:1405-1444 loadHistory 是唯一写基线的地方'],
+      'lib/client.js:1405-1444 loadHistory 是唯一写基线的地方',
+      '实测 session-8eb3e07a 的 sessionStorage 基线被写成 32ca2a1（最后一次提交），历史为空'],
     fix:
       '在 session 打开（而不是面板打开）时就记录基线；或把基线记录下沉到服务端 session 生命周期，' +
       '与面板可见性解耦。',
+    fixed:
+      '已修：history 请求携带 sessionId，host 用 SessionHeader.createdAt 作为 Session 开始时刻，' +
+      '再从每个分支的 reflog 取该时刻前的最后一次 ref 更新作为基线（src/operations.js:246-315、' +
+      'index.js:127-132）。面板晚打开或换标签页重开都不影响基线；' +
+      '实测 session-8eb3e07a 恢复出 4 个本 Session 提交。',
     cases: ['O4'],
   },
   {

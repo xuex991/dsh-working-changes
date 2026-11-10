@@ -59,6 +59,17 @@ async function commitRepo(root, files = {}) {
   return root
 }
 
+async function commitAt(root, message, date, files = {}) {
+  for (const [path, contents] of Object.entries(files)) {
+    await writeFile(join(root, path), contents)
+  }
+  await git(['add', '.'], { cwd: root })
+  return git(['commit', '-qm', message], {
+    cwd: root,
+    env: { GIT_AUTHOR_DATE: date, GIT_COMMITTER_DATE: date },
+  })
+}
+
 test('snapshot shows the workspace changes normally reported by git status', async (t) => {
   const root = await repoFixture()
   t.after(() => rm(root, { recursive: true, force: true }))
@@ -363,6 +374,88 @@ test('history lists local branches per repository and excludes remotes', async (
   assert.equal(history.repos.some((repo) => repo.branches.some((branch) => (
     branch.name.includes('origin/')
   ))), false)
+})
+
+test('history pins each branch baseline at the session start instant', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'dsh-history-session-start-test-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  await initRepo(root, { 'file.txt': 'one\n' })
+  await commitAt(root, 'oldest', '2026-11-03T01:00:00Z', { 'file.txt': 'one\n' })
+  const oldest = (await git(['rev-parse', 'HEAD'], { cwd: root })).stdout.trim()
+  await commitAt(root, 'middle', '2026-11-03T02:00:00Z', { 'file.txt': 'two\n' })
+  const middle = (await git(['rev-parse', 'HEAD'], { cwd: root })).stdout.trim()
+  await commitAt(root, 'newest', '2026-11-03T03:00:00Z', { 'file.txt': 'three\n' })
+
+  const operations = createOperations({ exec })
+  const started = await operations.handle('history', {
+    cwd: root,
+    since: Date.parse('2026-11-03T02:30:00Z'),
+  })
+  assert.equal(started.repos[0].branches[0].baseline, middle)
+
+  const bornInSession = await operations.handle('history', {
+    cwd: root,
+    since: Date.parse('2026-11-03T00:30:00Z'),
+  })
+  assert.equal(bornInSession.repos[0].branches[0].baseline, oldest)
+  assert.notEqual(oldest, middle)
+})
+
+test('history leaves the baseline empty when a branch has no reflog', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'dsh-history-no-reflog-test-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  await initRepo(root, { 'file.txt': 'one\n' })
+  await git(['config', 'core.logAllRefUpdates', 'false'], { cwd: root })
+  await commitAt(root, 'only', '2026-11-03T01:00:00Z', { 'file.txt': 'one\n' })
+
+  const operations = createOperations({ exec })
+  const history = await operations.handle('history', {
+    cwd: root,
+    since: Date.parse('2026-11-03T00:30:00Z'),
+  })
+  assert.equal(history.repos[0].branches[0].baseline, null)
+})
+
+test('history falls back to the creation point for a branch made during the session', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'dsh-history-created-branch-test-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  await initRepo(root, { 'base.txt': 'base\n' })
+  await commitAt(root, 'base', '2026-11-03T01:00:00Z', { 'base.txt': 'base\n' })
+  const base = (await git(['rev-parse', 'HEAD'], { cwd: root })).stdout.trim()
+  await git(['switch', '-qc', 'feature/session'], { cwd: root })
+  await commitAt(root, 'feature work', '2026-11-03T03:00:00Z', { 'feature.txt': 'work\n' })
+
+  const operations = createOperations({ exec })
+  const history = await operations.handle('history', {
+    cwd: root,
+    since: Date.parse('2026-11-03T00:30:00Z'),
+  })
+  const feature = history.repos[0].branches.find((branch) => branch.name === 'feature/session')
+  assert.equal(feature.baseline, base)
+})
+
+test('history resolves the session start from the host when only a session id is sent', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'dsh-history-host-start-test-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  await initRepo(root, { 'file.txt': 'one\n' })
+  await commitAt(root, 'oldest', '2026-11-03T01:00:00Z', { 'file.txt': 'one\n' })
+  await commitAt(root, 'middle', '2026-11-03T02:00:00Z', { 'file.txt': 'two\n' })
+  const middle = (await git(['rev-parse', 'HEAD'], { cwd: root })).stdout.trim()
+  await commitAt(root, 'newest', '2026-11-03T03:00:00Z', { 'file.txt': 'three\n' })
+
+  const operations = createOperations({
+    exec,
+    sessionStart: (sessionId) => (
+      sessionId === 'session-active'
+        ? Date.parse('2026-11-03T02:30:00Z')
+        : null
+    ),
+  })
+  const active = await operations.handle('history', { cwd: root, sessionId: 'session-active' })
+  assert.equal(active.repos[0].branches[0].baseline, middle)
+
+  const cold = await operations.handle('history', { cwd: root, sessionId: 'session-gone' })
+  assert.equal(cold.repos[0].branches[0].baseline, null)
 })
 
 test('branch commits are returned newest first with branch identity', async (t) => {
