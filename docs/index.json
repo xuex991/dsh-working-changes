@@ -27,12 +27,12 @@
       },
       "versions": [
         {
-          "version": "0.5.4",
-          "publishTimestamp": 1794208225,
+          "version": "0.5.5",
+          "publishTimestamp": 1794307204,
           "source": {
             "type": "git",
             "url": "https://github.com/xuex991/dsh-working-changes",
-            "commit": "8288a9aac1cf44f99e8d6865da8c7021ae931a06"
+            "commit": "d9d709f6f9d48b722a7d51a1cf2f97473771c5fd"
           },
           "engines": {
             "dsh": ">=0.2.1-rc.2"
@@ -58,12 +58,12 @@
       },
       "versions": [
         {
-          "version": "0.1.1",
-          "publishTimestamp": 1794208225,
+          "version": "0.3.0",
+          "publishTimestamp": 1794307204,
           "source": {
             "type": "git",
             "url": "https://github.com/xuex991/dsh-readable-output",
-            "commit": "c3c1402b17147fb503075184fa4fff2082c12c42"
+            "commit": "3d4e54d6e1b00f3f3972c555c8d734cbbf932009"
           },
           "engines": {
             "dsh": ">=0.1.0-rc.6"
