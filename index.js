@@ -2,7 +2,7 @@ import { GitError, cleanGitEnv } from './src/git.js'
 import { createOperations } from './src/operations.js'
 
 export const name = 'session-changes'
-export const inject = ['connection', 'sessions', 'subprocess']
+export const inject = ['connection', 'sessionPersistence', 'sessions', 'subprocess']
 
 const ROUTE_PATH = '/api/session-changes'
 const STDOUT_MAX_BYTES = 18 * 1024 * 1024
@@ -129,9 +129,16 @@ async function handleRequest(request, operations) {
 export function apply(ctx) {
   const operations = createOperations({
     exec: createExec(ctx),
-    sessionStart: (sessionId) => {
-      const createdAt = ctx.sessions?.get?.(sessionId)?.header?.createdAt
-      return Number.isFinite(createdAt) ? createdAt : null
+    sessionStart: async (sessionId) => {
+      const live = ctx.sessions?.get?.(sessionId)?.header?.createdAt
+      if (Number.isFinite(live)) return live
+      try {
+        const stored = await ctx.sessionPersistence?.stat?.(sessionId)
+        const createdAt = stored?.header?.createdAt
+        return Number.isFinite(createdAt) ? createdAt : null
+      } catch {
+        return null
+      }
     },
   })
   ctx.effect(() => {
